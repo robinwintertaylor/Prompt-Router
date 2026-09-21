@@ -54,6 +54,36 @@ When a request arrives at the router, the prompt state is packaged into the foll
 }
 ```
 
+
+### Official SDK Implementation (`@typesafe-ai/sdk`)
+
+Prompt-Router directly utilizes the official `@typesafe-ai/sdk` methods as verified in the [Jev API Guide](https://jevplayground.com/jev-api):
+
+```typescript
+import { TypeSafeClient, choice, score, noul } from '@typesafe-ai/sdk';
+
+const client = new TypeSafeClient({
+  apiKey: process.env.TYPESAFE_API_KEY,
+  timeout: 1500
+});
+
+const response = await client.systemOne({
+  state: stateText,
+  questions: {
+    intent: choice('Classify the primary task type of the user request', { ... }),
+    complexity: score('Rate the cognitive difficulty and model capability required', [ ... ]),
+    needs_reasoner: noul('Does this request specifically require an extended chain-of-thought reasoning model like o1, o3, or DeepSeek R1?')
+  }
+});
+
+// Calibrated responses returned in 70-150ms:
+// response.answers.intent.choice -> string
+// response.answers.intent.confidence -> 0.0 to 1.0
+// response.answers.complexity.score -> float (e.g. 3.8)
+// response.answers.needs_reasoner.noul -> float (e.g. 0.85)
+// response.usage.input_tokens -> number
+```
+
 ---
 
 ## 3. Decision Matrix & Routing Thresholds

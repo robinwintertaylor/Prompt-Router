@@ -1,10 +1,11 @@
 import { config } from './config.js';
 import { getSetting } from './db.js';
+import { TypeSafeClient, choice, score, noul } from '@typesafe-ai/sdk';
 
 export interface JevEvaluation {
   intent: 'coding_complex' | 'coding_simple' | 'deep_reasoning' | 'factual_lookup' | 'creative_prose' | 'structured_extraction';
   intentConfidence: number;
-  complexityScore: number; // 1 to 5
+  complexityScore: number; // 1 to 5 (can be fractional)
   complexityConfidence: number;
   needsReasoner: number; // 0 to 1
   jevDurationMs: number;
@@ -65,66 +66,37 @@ export async function evaluateWithJev(messages: any[]): Promise<JevEvaluation> {
   }
 
   try {
-    const payload = {
-      model: 'jev-latest',
-      state: stateText,
-      questions: {
-        intent: {
-          type: 'choice',
-          instructions: 'Classify the primary task type of the user request',
-          criteria: {
-            coding_complex: 'Multi-file architecture, tricky debugging, deep algorithm design, refactoring large codebase',
-            coding_simple: 'Single-function edits, boilerplate, basic scripts, CSS/HTML adjustments, minor bug fixes',
-            deep_reasoning: 'Intricate logical puzzles, math proofs, multi-step formal planning, rigorous analysis',
-            factual_lookup: 'Documentation lookup, definitions, simple questions, quick fact retrieval',
-            creative_prose: 'Creative writing, conversational chat, brainstorming ideas, casual banter',
-            structured_extraction: 'JSON data formatting, schema extraction, table restructuring, summarization'
-          }
-        },
-        complexity: {
-          type: 'score',
-          instructions: 'Rate the cognitive difficulty and model capability required',
-          criteria: [
-            'Level 1: Trivial greeting or minor factual lookup',
-            'Level 2: Standard task with low cognitive load',
-            'Level 3: Moderate complexity requiring solid coding or logical reasoning',
-            'Level 4: High complexity requiring advanced domain expertise or deep debugging',
-            'Level 5: Frontier complexity, intricate architecture, or cutting-edge reasoning'
-          ]
-        },
-        needs_reasoner: {
-          type: 'noul',
-          instructions: 'Does this request specifically require an extended chain-of-thought reasoning model like o1, o3, or DeepSeek R1?'
-        }
-      }
-    };
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1200);
-
-    const response = await fetch('https://api.typesafe.ai/v1/systemone', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey.trim()}`
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal
+    const client = new TypeSafeClient({
+      apiKey: apiKey.trim(),
+      timeout: 1500
     });
 
-    clearTimeout(timeoutId);
+    const response = await client.systemOne({
+      state: stateText,
+      questions: {
+        intent: choice('Classify the primary task type of the user request', {
+          coding_complex: 'Multi-file architecture, tricky debugging, deep algorithm design, refactoring large codebase',
+          coding_simple: 'Single-function edits, boilerplate, basic scripts, CSS/HTML adjustments, minor bug fixes',
+          deep_reasoning: 'Intricate logical puzzles, math proofs, multi-step formal planning, rigorous analysis',
+          factual_lookup: 'Documentation lookup, definitions, simple questions, quick fact retrieval',
+          creative_prose: 'Creative writing, conversational chat, brainstorming ideas, casual banter',
+          structured_extraction: 'JSON data formatting, schema extraction, table restructuring, summarization'
+        }),
+        complexity: score('Rate the cognitive difficulty and model capability required', [
+          'Level 1: Trivial greeting or minor factual lookup',
+          'Level 2: Standard task with low cognitive load',
+          'Level 3: Moderate complexity requiring solid coding or logical reasoning',
+          'Level 4: High complexity requiring advanced domain expertise or deep debugging',
+          'Level 5: Frontier complexity, intricate architecture, or cutting-edge reasoning'
+        ]),
+        needs_reasoner: noul('Does this request specifically require an extended chain-of-thought reasoning model like o1, o3, or DeepSeek R1?')
+      }
+    });
 
-    if (!response.ok) {
-      console.warn(`[Jev API] Returned status ${response.status}. Falling back to heuristic.`);
-      return runHeuristicEvaluation(stateText, estimatedInputTokens, Date.now() - startTime);
-    }
-
-    const data: any = await response.json();
     const duration = Date.now() - startTime;
-
-    const intentAnswer = data.answers?.intent;
-    const complexityAnswer = data.answers?.complexity;
-    const needsReasonerAnswer = data.answers?.needs_reasoner;
+    const intentAnswer: any = response.answers?.intent;
+    const complexityAnswer: any = response.answers?.complexity;
+    const needsReasonerAnswer: any = response.answers?.needs_reasoner;
 
     return {
       intent: (intentAnswer?.choice as any) || 'coding_complex',
@@ -134,13 +106,14 @@ export async function evaluateWithJev(messages: any[]): Promise<JevEvaluation> {
       needsReasoner: needsReasonerAnswer?.noul ?? 0.2,
       jevDurationMs: duration,
       isFallback: false,
-      jevInputTokens: data.usage?.prompt_tokens || estimatedInputTokens
+      jevInputTokens: response.usage?.input_tokens ?? estimatedInputTokens
     };
   } catch (err: any) {
-    console.warn(`[Jev API] Error during evaluation: ${err.message}. Using heuristic fallback.`);
+    console.warn(`[Jev SDK] Evaluation notice (${err.name || 'Error'}): ${err.message}. Using heuristic fallback.`);
     return runHeuristicEvaluation(stateText, estimatedInputTokens, Date.now() - startTime);
   }
 }
+
 
 function runHeuristicEvaluation(stateText: string, tokens: number, elapsed: number): JevEvaluation {
   const lower = stateText.toLowerCase();
