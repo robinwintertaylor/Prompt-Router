@@ -71,7 +71,9 @@ export async function handleChatCompletions(req: Request, res: Response) {
           const { done, value } = await reader.read();
           if (done) break;
           const chunkStr = decoder.decode(value, { stream: true });
-          res.write(chunkStr);
+          if (res.writable && !res.writableEnded) {
+            res.write(chunkStr);
+          }
 
           if (chunkStr.includes('"usage":')) {
             try {
@@ -93,15 +95,19 @@ export async function handleChatCompletions(req: Request, res: Response) {
       } else {
         for await (const chunk of stream) {
           const chunkStr = chunk.toString();
-          res.write(chunkStr);
+          if (res.writable && !res.writableEnded) {
+            res.write(chunkStr);
+          }
           completionTokens += Math.max(1, Math.floor(chunkStr.length / 8));
         }
       }
 
-      res.end();
+      if (!res.writableEnded) {
+        res.end();
+      }
     } catch (err: any) {
-      console.error('[Streaming error]:', err);
-      res.end();
+      console.error('[Streaming error]:', err.message);
+      if (!res.writableEnded) res.end();
     }
 
     const durationMs = Date.now() - startTime;
