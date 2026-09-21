@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { getMetrics, getRecentLogs, getSetting, setSetting } from '../db.js';
 import { evaluateWithJev } from '../jev.js';
-import { selectOptimalModel } from '../router.js';
+import { selectOptimalModel, executeRoutedCompletion } from '../router.js';
 import { calculateCosts } from '../pricing.js';
 import { config } from '../config.js';
 import { getAllCatalogModels, syncCatalog } from '../catalog.js';
@@ -64,19 +64,42 @@ export async function handleTestRoute(req: Request, res: Response) {
     const prompt = req.body.prompt || 'Hello world';
     const messages = [{ role: 'user', content: prompt }];
 
+    // 1. Evaluate with TypeSafe Jev System One
     const jev = await evaluateWithJev(messages);
-    const strategy = (getSetting('ROUTING_STRATEGY', config.routingStrategy) as any) || 'cost_optimized';
-    const selection = selectOptimalModel('auto', jev, strategy);
 
-    const estPromptTokens = Math.ceil(prompt.length / 4);
-    const estCompletionTokens = 150;
-    const costs = calculateCosts(selection.model, estPromptTokens, estCompletionTokens, jev.jevInputTokens);
+    // 2. Execute routed completion using Jev's evaluation across aggregators
+    const { providerResponse, selectedModel, selectedProvider, routingReason } =
+      await executeRoutedCompletion({ model: 'auto', messages, max_tokens: 1024 }, jev, false);
+
+    let responseContent = '';
+    let promptTokens = Math.ceil(prompt.length / 4);
+    let completionTokens = 50;
+
+    if (providerResponse.ok && providerResponse.data) {
+      responseContent = providerResponse.data.choices?.[0]?.message?.content || '';
+      if (providerResponse.data.usage) {
+        promptTokens = providerResponse.data.usage.prompt_tokens || promptTokens;
+        completionTokens = providerResponse.data.usage.completion_tokens || completionTokens;
+      }
+    } else {
+      responseContent = providerResponse.error || 'No response returned from aggregator';
+    }
+
+    const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens);
 
     res.json({
       prompt,
       jev,
-      selection,
-      estimatedCosts: costs
+      selectedModel,
+      selectedProvider,
+      routingReason,
+      responseContent,
+      usage: {
+        promptTokens,
+        completionTokens,
+        totalTokens: promptTokens + completionTokens
+      },
+      costs
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

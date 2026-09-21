@@ -220,11 +220,11 @@ async function runPromptTest() {
 
   const btn = document.getElementById('btn-run-test');
   btn.disabled = true;
-  btn.textContent = 'Evaluating with Jev...';
+  btn.textContent = 'Evaluating & Executing...';
 
   const panel = document.getElementById('test-result-panel');
   panel.classList.remove('hidden');
-  panel.innerHTML = '<div style="color: var(--text-muted);">Evaluating prompt with TypeSafe Jev System One...</div>';
+  panel.innerHTML = '<div style="color: var(--text-muted);">Step 1: Evaluating with TypeSafe Jev System One...<br>Step 2: Dispatching prompt to model aggregator...</div>';
 
   try {
     const res = await fetch('/api/test-route', {
@@ -235,8 +235,9 @@ async function runPromptTest() {
 
     const data = await res.json();
     const j = data.jev;
-    const s = data.selection;
-    const c = data.estimatedCosts;
+    const c = data.costs || {};
+    const providerName = data.selectedProvider === 'openrouter' ? 'OpenRouter' : 'Mammouth AI';
+    const providerBadgeClass = data.selectedProvider === 'openrouter' ? 'badge-purple' : 'badge-emerald';
 
     panel.innerHTML = `
       <div class="result-grid">
@@ -257,13 +258,35 @@ async function runPromptTest() {
           <span class="result-stat-val text-emerald">${j.jevDurationMs} ms</span>
         </div>
       </div>
-      <div style="margin-top: 10px; padding: 10px; background: rgba(59, 130, 246, 0.08); border-radius: 6px; border: 1px solid rgba(59, 130, 246, 0.2);">
-        <strong>Routed Target:</strong> <code style="color: #93c5fd; font-weight: 700;">${s.model}</code> via <code>${s.reason}</code>
+
+      <div style="margin-top: 10px; padding: 12px; background: rgba(59, 130, 246, 0.08); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div>
+          <strong>Routed Model:</strong> <code style="color: #93c5fd; font-weight: 700; font-size: 14px;">${escapeHtml(data.selectedModel)}</code>
+          <span style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 2px;">${escapeHtml(data.routingReason)}</span>
+        </div>
+        <div>
+          <span class="badge ${providerBadgeClass}" style="font-size: 13px; padding: 6px 14px; letter-spacing: 0.03em;">
+            via ${providerName}
+          </span>
+        </div>
       </div>
-      <div style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
-        Estimated Cost: <strong>$${c.totalActualCost.toFixed(5)}</strong> &middot;
-        Claude 3.5 Would Cost: <strong>$${c.costIfClaude.toFixed(5)}</strong> &middot;
-        Estimated Savings: <strong style="color: #10b981;">+$${c.savingsVsClaude.toFixed(5)} (${Math.round((c.savingsVsClaude / Math.max(0.0001, c.costIfClaude)) * 100)}%)</strong>
+
+      <div style="margin-top: 12px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--border); border-radius: 8px; padding: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">
+            💬 Response from ${escapeHtml(data.selectedModel)} (via ${providerName}):
+          </span>
+          <span style="font-size: 11px; font-family: var(--font-mono); color: var(--text-muted);">
+            Tokens: ${data.usage?.promptTokens || 0} in / ${data.usage?.completionTokens || 0} out (${data.usage?.totalTokens || 0} total)
+          </span>
+        </div>
+        <pre style="white-space: pre-wrap; font-family: inherit; font-size: 13px; line-height: 1.6; color: var(--text-primary); max-height: 280px; overflow-y: auto; background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">${escapeHtml(data.responseContent || 'No response content returned')}</pre>
+      </div>
+
+      <div style="margin-top: 10px; font-size: 12px; color: var(--text-secondary);">
+        Actual Spend: <strong>$${(c.totalActualCost || 0).toFixed(5)}</strong> &middot;
+        Claude 3.5 Would Cost: <strong>$${(c.costIfClaude || 0).toFixed(5)}</strong> &middot;
+        Savings: <strong style="color: #10b981;">+$${(c.savingsVsClaude || 0).toFixed(5)} (${Math.round(((c.savingsVsClaude || 0) / Math.max(0.0001, c.costIfClaude || 0)) * 100)}%)</strong>
       </div>
     `;
   } catch (err) {
