@@ -4,3 +4,6 @@ dist/
 prompt_router.db
 prompt_router.db-journal
 *.log
+*.db-shm
+*.db-wal
+

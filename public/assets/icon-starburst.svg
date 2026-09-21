@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 70" width="120" height="70" fill="none">
+  <!-- Rounded Gateway Teal container -->
+  <rect x="2" y="2" width="116" height="66" rx="14" fill="#073844" stroke="#0A4D5C" stroke-width="2"/>
+  
+  <!-- Vertical Gateway Pillar -->
+  <rect x="56" y="10" width="8" height="50" rx="3" fill="#0D5C6C" />
+  
+  <!-- Horizontal Parallel Interception Stream -->
+  <line x1="12" y1="35" x2="108" y2="35" stroke="#C6FF00" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
+  
+  <!-- Jev 120ms Intelligence Starburst (#C6FF00) -->
+  <g transform="translate(60, 35)">
+    <!-- 8-point geometric starburst -->
+    <path d="M 0,-18 L 4,-5 L 18,0 L 4,5 L 0,18 L -4,5 L -18,0 L -4,-5 Z" fill="#C6FF00" />
+    <path d="M -10,-10 L 0,-3 L 10,-10 L 3,0 L 10,10 L 0,3 L -10,10 L -3,0 Z" fill="#E4FF66" opacity="0.75" />
+    <circle cx="0" cy="0" r="3.5" fill="#073844" />
+  </g>
+</svg>

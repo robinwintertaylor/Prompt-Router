@@ -3,182 +3,258 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prompt-Router | Jev-Powered Model Router & Optics</title>
+  <title>Prompt-Router | The Parallel Junction (Concept 1)</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,700;1,800&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="app-container">
-    <header class="header">
-      <div class="header-left">
-        <div class="logo-mark">⚡</div>
-        <div>
-          <h1 class="brand-title">Prompt-Router</h1>
-          <p class="brand-subtitle">Powered by TypeSafe Jev System One &middot; Mammouth &middot; OpenRouter</p>
+  <div class="app-wrapper">
+
+    <!-- 2. DASHBOARD HEADER & INTERFACE ASSET (Concept 1 Production Spec) -->
+    <header class="gateway-banner">
+      <div class="banner-content">
+        <a href="/" class="banner-brand">
+          <div class="brand-icon-wrap" title="The Parallel Junction (120ms Jev Interception)">
+            <!-- The Parallel Junction Icon SVG -->
+            <svg viewBox="0 0 128 128" fill="none">
+              <rect x="58" y="8" width="12" height="112" rx="4" fill="#07404B" />
+              <polygon points="76,14 36,66 64,66 48,114 92,54 64,54" fill="#C6FF00" stroke="#041B20" stroke-width="2" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <div class="brand-text-block">
+            <div class="brand-title">PROMPT<span class="junction-dash">-</span>ROUTER</div>
+            <div class="brand-subtitle-active">
+              <span class="status-dot-pulse"></span>
+              GATEWAY INTERFACE ACTIVE (PORT <span id="port-display">4000</span>)
+            </div>
+          </div>
+        </a>
+
+        <div class="banner-actions">
+          <button class="btn btn-secondary" id="btn-open-catalog" title="Inspect 546 synchronized models">
+            📚 Models Catalog (<span id="catalog-count-display">...</span>)
+          </button>
+          <button class="btn btn-secondary" id="btn-sync-catalog" title="Sync live rates from OpenRouter & Mammouth">
+            🔄 Sync Aggregators
+          </button>
+          <button class="btn btn-secondary" id="btn-open-settings" title="Gateway Configuration">
+            ⚙️ Settings
+          </button>
+          <button class="btn btn-gateway" id="btn-refresh" title="Refresh Live Optics">
+            🔄 Refresh
+          </button>
         </div>
-      </div>
-      <div class="header-right">
-        <div class="status-indicator">
-          <span class="status-dot pulse"></span>
-          <span class="status-text">Gateway Active (Port <span id="port-display">4000</span>)</span>
-        </div>
-        <button class="btn btn-secondary" id="btn-open-catalog">📚 Models Catalog (<span id="catalog-count-display">...</span>)</button>
-        <button class="btn btn-secondary" id="btn-sync-catalog">🔄 Sync Aggregators</button>
-        <button class="btn btn-secondary" id="btn-open-settings">⚙️ Settings</button>
-        <button class="btn btn-primary" id="btn-refresh">🔄 Refresh</button>
       </div>
     </header>
 
-    <main class="main-content">
-      <section class="section">
-        <h2 class="section-title">📊 Real-Time Optics & Cost Comparison</h2>
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">Total Requests</span>
-              <span class="metric-icon">🚀</span>
-            </div>
-            <div class="metric-value" id="val-total-requests">0</div>
-            <div class="metric-sub" id="val-total-tokens">0 total tokens</div>
-          </div>
-
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">Actual Total Spend</span>
-              <span class="metric-icon">💵</span>
-            </div>
-            <div class="metric-value text-accent" id="val-actual-cost">$0.0000</div>
-            <div class="metric-sub">Includes Jev + Model tokens</div>
-          </div>
-
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">Cost if 100% Claude 3.5</span>
-              <span class="metric-icon">🧠</span>
-            </div>
-            <div class="metric-value text-claude" id="val-claude-cost">$0.0000</div>
-            <div class="metric-sub">Benchmark: $3.00/M in, $15.00/M out</div>
-          </div>
-
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">Cost if 100% GPT-4o</span>
-              <span class="metric-icon">🤖</span>
-            </div>
-            <div class="metric-value text-openai" id="val-gpt4o-cost">$0.0000</div>
-            <div class="metric-sub">Benchmark: $2.50/M in, $10.00/M out</div>
-          </div>
-
-          <div class="metric-card highlight-card">
-            <div class="metric-header">
-              <span class="metric-label">Net Dollars Saved</span>
-              <span class="metric-icon">🎉</span>
-            </div>
-            <div class="metric-value text-emerald" id="val-savings">$0.0000</div>
-            <div class="metric-sub" id="val-savings-percent">0% cost reduction vs Claude</div>
-          </div>
-
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">Avg Jev Routing Latency</span>
-              <span class="metric-icon">⚡</span>
-            </div>
-            <div class="metric-value" id="val-jev-speed">0 ms</div>
-            <div class="metric-sub">Zero-hallucination decision pass</div>
-          </div>
+    <!-- Sub-Toolbar (Matching Asset 2: [ Filter Logs... | Request metrics ]) -->
+    <div class="sub-toolbar">
+      <div class="sub-toolbar-inner">
+        <div class="search-input-wrap">
+          <svg class="search-icon-svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="log-search" class="input-search-styled" placeholder="Filter Logs & Audit Trail...">
         </div>
-      </section>
 
-      <div class="two-col-grid">
-        <section class="section card">
-          <h3 class="card-title">💰 Cost Comparison Breakdown</h3>
-          <div class="comparison-bars">
-            <div class="bar-group">
-              <div class="bar-labels">
-                <span>Prompt-Router (Actual)</span>
-                <span id="label-actual-cost">$0.0000</span>
-              </div>
-              <div class="progress-track">
-                <div class="progress-bar bar-actual" id="bar-actual" style="width: 20%"></div>
-              </div>
-            </div>
+        <div class="nav-tabs-group">
+          <button class="nav-tab-item active" id="tab-metrics">
+            Request metrics <span class="tab-badge" id="tab-requests-count">0</span>
+          </button>
+          <button class="nav-tab-item" id="tab-catalog-quick">
+            Catalog <span class="tab-badge" id="tab-models-count">546</span>
+          </button>
+        </div>
 
-            <div class="bar-group">
-              <div class="bar-labels">
-                <span>If 100% Anthropic Claude 3.5 Sonnet</span>
-                <span id="label-claude-cost">$0.0000</span>
-              </div>
-              <div class="progress-track">
-                <div class="progress-bar bar-claude" id="bar-claude" style="width: 100%"></div>
-              </div>
-            </div>
+        <div class="strategy-toggle-wrap">
+          <span>Routing Strategy:</span>
+          <select id="select-strategy-quick">
+            <option value="cost_optimized">Cost-Optimized (Flash/Mini & R1)</option>
+            <option value="performance_optimized">Performance-Optimized (Sonnet & GPT-4o)</option>
+            <option value="balanced">Balanced (Speed & Budget)</option>
+          </select>
+        </div>
+      </div>
+    </div>
 
-            <div class="bar-group">
-              <div class="bar-labels">
-                <span>If 100% OpenAI GPT-4o</span>
-                <span id="label-gpt4o-cost">$0.0000</span>
-              </div>
-              <div class="progress-track">
-                <div class="progress-bar bar-gpt4o" id="bar-gpt4o" style="width: 80%"></div>
-              </div>
-            </div>
-          </div>
-        </section>
+    <!-- Main Content -->
+    <main class="app-container">
 
-        <section class="section card">
-          <h3 class="card-title">🎯 Model Routing Distribution</h3>
-          <div id="model-distribution-list" class="distribution-list">
-            <div class="empty-state">No requests routed yet. Connect your IDE or test below!</div>
-          </div>
-        </section>
+      <!-- Section 1: Dashboard Cards (Concept 1 Spec) -->
+      <div class="section-header-wrap">
+        <div class="section-heading">
+          <span>📊 Real-Time Optics &amp; Cost Arbitrage</span>
+        </div>
+        <img src="/assets/linear-intersection.svg" class="section-accent-line" alt="Intersection Accent">
       </div>
 
-      <!-- Live Interactive Playground -->
-      <section class="section card playground-card">
-        <div class="playground-header">
-          <div>
-            <h3 class="card-title">🧪 Interactive Prompt Route Simulator</h3>
-            <p class="card-sub">Test any prompt to see Jev evaluate intent, complexity score, and pick the optimal model in real time.</p>
+      <div class="metrics-grid">
+        <!-- 120ms Jev Speed Card -->
+        <div class="dashboard-card card-jev-speed">
+          <div class="card-top">
+            <span class="card-title-sm">Jev System One Latency</span>
+            <span class="jev-badge-flash">⚡ 120ms</span>
           </div>
+          <div class="card-metric-val" id="val-jev-speed">120 ms</div>
+          <div class="card-subtext">Zero-hallucination parallel decision pass</div>
         </div>
-        <div class="playground-body">
-          <textarea id="test-prompt-input" rows="3" placeholder="Enter a prompt to test (e.g. 'Write a regex for email' or 'Architect a distributed consensus engine with Raft')..."></textarea>
-          <div class="playground-actions">
-            <button class="btn btn-primary" id="btn-run-test">⚡ Evaluate Route with Jev</button>
-            <div class="preset-buttons">
-              <span class="preset-label">Quick Presets:</span>
-              <button class="btn-chip" data-prompt="Hi, how are you today?">Greeting</button>
-              <button class="btn-chip" data-prompt="Write a Python function to reverse a string in place.">Simple Code</button>
-              <button class="btn-chip" data-prompt="Architect an event-driven microservices system with Kafka and vector clocks.">Complex Code</button>
-              <button class="btn-chip" data-prompt="If 3 cats catch 3 mice in 3 minutes, how many cats are needed to catch 100 mice in 100 minutes? Give mathematical proof.">Deep Reasoning</button>
+
+        <!-- Total Requests & Tokens -->
+        <div class="dashboard-card">
+          <div class="card-top">
+            <span class="card-title-sm">Total Ingress Requests</span>
+            <div class="card-icon-pill pill-teal">🚀</div>
+          </div>
+          <div class="card-metric-val" id="val-total-requests">0</div>
+          <div class="card-subtext" id="val-total-tokens">0 total tokens</div>
+        </div>
+
+        <!-- Actual Total Spend -->
+        <div class="dashboard-card">
+          <div class="card-top">
+            <span class="card-title-sm">Actual Routed Spend</span>
+            <div class="card-icon-pill pill-teal">💵</div>
+          </div>
+          <div class="card-metric-val" id="val-actual-cost" style="color: var(--gateway-teal-dark);">$0.0000</div>
+          <div class="card-subtext">Includes Jev + Routed Model tokens</div>
+        </div>
+
+        <!-- Cost if Claude 3.5 -->
+        <div class="dashboard-card">
+          <div class="card-top">
+            <span class="card-title-sm">Cost if 100% Claude 3.5</span>
+            <div class="card-icon-pill pill-yellow">🧠</div>
+          </div>
+          <div class="card-metric-val" id="val-claude-cost" style="color: #D97706;">$0.0000</div>
+          <div class="card-subtext">Benchmark: $3.00/M in, $15.00/M out</div>
+        </div>
+
+        <!-- Cost if GPT-4o -->
+        <div class="dashboard-card">
+          <div class="card-top">
+            <span class="card-title-sm">Cost if 100% GPT-4o</span>
+            <div class="card-icon-pill pill-teal">🤖</div>
+          </div>
+          <div class="card-metric-val" id="val-gpt4o-cost" style="color: #00897B;">$0.0000</div>
+          <div class="card-subtext">Benchmark: $2.50/M in, $10.00/M out</div>
+        </div>
+
+        <!-- Net Savings Generated (Savings Green) -->
+        <div class="dashboard-card card-savings">
+          <div class="card-top">
+            <span class="card-title-sm">Net Dollars Saved</span>
+            <div class="card-icon-pill pill-green">🎉</div>
+          </div>
+          <div class="card-metric-val" id="val-savings">$0.0000</div>
+          <div class="card-subtext" id="val-savings-percent">0% cost reduction vs Claude</div>
+        </div>
+      </div>
+
+      <!-- Section 2: Two-Column Analytics Panel -->
+      <div class="two-col-grid">
+        <!-- Cost Comparison Breakdown with Progress Tracks -->
+        <div class="content-panel">
+          <div class="panel-header">
+            <h3 class="panel-title">💰 Financial Optics Comparison</h3>
+            <span class="tab-badge">Arbitrage</span>
+          </div>
+          <div class="comparison-container">
+            <div class="bar-group">
+              <div class="bar-meta">
+                <span class="rate-label">Prompt-Router (Dynamic Routed Actual)</span>
+                <span class="cost-figure" id="label-actual-cost" style="color: var(--gateway-teal-dark);">$0.0000</span>
+              </div>
+              <div class="progress-track-schematic">
+                <div class="progress-fill fill-actual" id="bar-actual" style="width: 20%;"></div>
+              </div>
+            </div>
+
+            <div class="bar-group">
+              <div class="bar-meta">
+                <span class="rate-label">If 100% Anthropic Claude 3.5 Sonnet</span>
+                <span class="cost-figure" id="label-claude-cost" style="color: #D97706;">$0.0000</span>
+              </div>
+              <div class="progress-track-schematic">
+                <div class="progress-fill fill-claude" id="bar-claude" style="width: 100%;"></div>
+              </div>
+            </div>
+
+            <div class="bar-group">
+              <div class="bar-meta">
+                <span class="rate-label">If 100% OpenAI GPT-4o</span>
+                <span class="cost-figure" id="label-gpt4o-cost" style="color: #00897B;">$0.0000</span>
+              </div>
+              <div class="progress-track-schematic">
+                <div class="progress-fill fill-gpt4o" id="bar-gpt4o" style="width: 80%;"></div>
+              </div>
             </div>
           </div>
-          <div id="test-result-panel" class="test-result-panel hidden"></div>
         </div>
-      </section>
 
-      <!-- Live Request Logs & Optics Stream -->
-      <section class="section card">
-        <div class="table-header-wrap">
-          <div>
-            <h3 class="card-title">📋 Live Request Optics & Audit Trail</h3>
-            <p class="card-sub">Real-time decisions, token analytics, and cost comparisons for every incoming IDE prompt.</p>
+        <!-- Model Routing Distribution -->
+        <div class="content-panel">
+          <div class="panel-header">
+            <h3 class="panel-title">🎯 Model Routing Distribution</h3>
+            <span class="tab-badge">Jev Dynamic Selection</span>
           </div>
-          <div class="filter-wrap">
-            <input type="text" id="log-search" placeholder="Filter requests..." class="input-search">
+          <div id="model-distribution-list" class="distribution-list">
+            <div class="empty-state">No requests routed yet. Connect your IDE or run the simulator below!</div>
           </div>
         </div>
-        <div class="table-container">
-          <table class="data-table">
+      </div>
+
+      <!-- Section 3: Interactive Prompt Route Simulator -->
+      <div class="simulator-panel" id="simulator-section">
+        <div class="simulator-top">
+          <div>
+            <h3 class="panel-title">⚡ Interactive Prompt Route Simulator</h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+              Test any prompt to observe the 120ms non-autoregressive Jev interception flash and optimal aggregator routing.
+            </p>
+          </div>
+          <img src="/assets/linear-intersection.svg" style="height: 18px; opacity: 0.5;" alt="">
+        </div>
+
+        <textarea id="test-prompt-input" class="sim-textarea" placeholder="Enter a prompt to test (e.g. 'Write a regex for email' or 'Architect a distributed consensus engine with Raft')..."></textarea>
+
+        <div class="sim-controls">
+          <div class="preset-chip-list">
+            <span class="chip-label">Presets:</span>
+            <button class="btn-chip" data-prompt="Hi, how are you today?">Greeting</button>
+            <button class="btn-chip" data-prompt="Write a Python function to reverse a string in place.">Simple Code</button>
+            <button class="btn-chip" data-prompt="Architect an event-driven microservices system with Kafka and vector clocks.">Complex Code</button>
+            <button class="btn-chip" data-prompt="If 3 cats catch 3 mice in 3 minutes, how many cats are needed to catch 100 mice in 100 minutes? Give mathematical proof.">Deep Reasoning</button>
+          </div>
+          <button class="btn btn-gateway" id="btn-run-test">
+            ⚡ Intercept &amp; Route with Jev
+          </button>
+        </div>
+
+        <div id="test-result-panel" class="test-result-panel hidden"></div>
+      </div>
+
+      <!-- Section 4: Live Request Optics & Audit Trail Table -->
+      <div class="content-panel" id="logs-section">
+        <div class="panel-header">
+          <div>
+            <h3 class="panel-title">📋 Live Request Optics &amp; Audit Trail</h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+              Real-time decisions, token analytics, and cost comparisons for every incoming IDE prompt.
+            </p>
+          </div>
+          <span class="tab-badge" id="logs-counter-badge">Live Feed</span>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="tech-table">
             <thead>
               <tr>
                 <th>Time</th>
                 <th>Client App</th>
                 <th>Prompt Preview</th>
                 <th>Jev Evaluation</th>
-                <th>Routed Model & Provider</th>
+                <th>Routed Model &amp; Provider</th>
                 <th>Tokens</th>
                 <th>Actual Cost</th>
                 <th>Cost if Claude</th>
@@ -187,42 +263,43 @@
             </thead>
             <tbody id="logs-table-body">
               <tr>
-                <td colspan="9" class="text-center py-4">Loading request history...</td>
+                <td colspan="9" class="empty-state">Loading request history...</td>
               </tr>
             </tbody>
           </table>
         </div>
-      </section>
+      </div>
+
     </main>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="modal-overlay hidden">
-      <div class="modal-card">
-        <div class="modal-header">
+    <div id="settings-modal" class="modal-backdrop hidden">
+      <div class="modal-window">
+        <div class="modal-header-teal">
           <h3>⚙️ Gateway Configuration</h3>
-          <button class="btn-close" id="btn-close-settings">&times;</button>
+          <button class="modal-close-btn" id="btn-close-settings">&times;</button>
         </div>
-        <div class="modal-body">
-          <div class="form-group">
+        <div class="modal-content-body">
+          <div class="form-field">
             <label>TypeSafe Jev API Key</label>
             <input type="password" id="input-typesafe-key" placeholder="ts_live_...">
             <small>Get your key at <a href="https://typesafe.ai" target="_blank">typesafe.ai</a>. If blank, heuristic evaluation is used.</small>
           </div>
 
-          <div class="form-group">
+          <div class="form-field">
             <label>Mammouth AI API Key (Primary LLM Source)</label>
             <input type="password" id="input-mammouth-key" placeholder="sk-mammouth-...">
             <small>Access Claude, GPT-4o, Gemini, DeepSeek at <a href="https://mammouth.ai" target="_blank">mammouth.ai</a>.</small>
           </div>
 
-          <div class="form-group">
+          <div class="form-field">
             <label>OpenRouter API Key (Alternative / Multi-Catalog)</label>
             <input type="password" id="input-openrouter-key" placeholder="sk-or-v1-...">
-            <small>Access hundreds of models at <a href="https://openrouter.ai" target="_blank">openrouter.ai</a>.</small>
+            <small>Provides 446 models across all vendors at <a href="https://openrouter.ai" target="_blank">openrouter.ai</a>.</small>
           </div>
 
-          <div class="form-group">
-            <label>Routing Strategy</label>
+          <div class="form-field">
+            <label>Jev Dynamic Routing Strategy</label>
             <select id="select-strategy">
               <option value="cost_optimized">Cost-Optimized (Saves 60-85% by routing simple tasks to Flash/Mini & reasoning to R1)</option>
               <option value="performance_optimized">Performance-Optimized (Routes coding to Claude 3.5 Sonnet & hard tasks to GPT-4o)</option>
@@ -230,7 +307,7 @@
             </select>
           </div>
 
-          <div class="form-group">
+          <div class="form-field">
             <label>Preferred Downstream Provider</label>
             <select id="select-provider">
               <option value="mammouth">Mammouth AI</option>
@@ -238,38 +315,38 @@
             </select>
           </div>
         </div>
-        <div class="modal-footer">
+        <div class="modal-action-footer">
           <button class="btn btn-secondary" id="btn-cancel-settings">Cancel</button>
-          <button class="btn btn-primary" id="btn-save-settings">Save Configuration</button>
+          <button class="btn btn-gateway" id="btn-save-settings">Save Configuration</button>
         </div>
       </div>
     </div>
 
     <!-- Catalog Modal -->
-    <div id="catalog-modal" class="modal-overlay hidden">
-      <div class="modal-card" style="max-width: 900px; max-height: 85vh; display: flex; flex-direction: column;">
-        <div class="modal-header">
+    <div id="catalog-modal" class="modal-backdrop hidden">
+      <div class="modal-window" style="max-width: 960px; max-height: 88vh; display: flex; flex-direction: column;">
+        <div class="modal-header-teal">
           <div>
             <h3>📚 Aggregator Models Catalog</h3>
-            <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
-              Live synchronized models and real-time rates from OpenRouter & Mammouth. Jev evaluates and picks from this catalog.
+            <p style="font-size: 11.5px; color: #80DEEA; margin-top: 2px;">
+              Live synchronized models and real-time rates from OpenRouter &amp; Mammouth. Jev evaluates and picks from this catalog.
             </p>
           </div>
-          <button class="btn-close" id="btn-close-catalog">&times;</button>
+          <button class="modal-close-btn" id="btn-close-catalog">&times;</button>
         </div>
-        <div style="padding: 12px 24px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: center; background: rgba(0,0,0,0.15);">
-          <input type="text" id="catalog-search" placeholder="Search models by name, slug or description..." class="input-search" style="flex: 1;">
-          <select id="catalog-tier-filter" style="background: var(--bg-main); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; color: var(--text-primary); font-size: 13px;">
+        <div style="padding: 12px 22px; border-bottom: 1px solid #CFD8DC; display: flex; gap: 12px; align-items: center; background: #F8FAFB;">
+          <input type="text" id="catalog-search" placeholder="Search models by name, slug or description..." class="input-search-styled" style="flex: 1;">
+          <select id="catalog-tier-filter" style="background: #FFFFFF; border: 1px solid #CFD8DC; border-radius: 6px; padding: 7px 12px; color: var(--text-black); font-size: 12.5px;">
             <option value="all">All Tiers</option>
             <option value="frontier_reasoning">Frontier Reasoning</option>
             <option value="frontier_coding">Frontier Coding</option>
             <option value="balanced">Balanced</option>
             <option value="fast_cheap">Fast & Cheap</option>
           </select>
-          <button class="btn btn-primary" id="btn-modal-sync-catalog">🔄 Sync Live Rates</button>
+          <button class="btn btn-gateway" id="btn-modal-sync-catalog">🔄 Sync Live Rates</button>
         </div>
-        <div style="flex: 1; overflow-y: auto; padding: 16px 24px;">
-          <table class="data-table">
+        <div style="flex: 1; overflow-y: auto; padding: 16px 22px;">
+          <table class="tech-table">
             <thead>
               <tr>
                 <th>Model ID</th>
@@ -282,12 +359,12 @@
             </thead>
             <tbody id="catalog-table-body">
               <tr>
-                <td colspan="6" class="text-center py-4">Loading synchronized catalog...</td>
+                <td colspan="6" class="empty-state">Loading synchronized catalog...</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div class="modal-footer" style="justify-content: space-between; align-items: center;">
+        <div class="modal-action-footer" style="justify-content: space-between; align-items: center;">
           <span style="font-size: 12px; color: var(--text-muted);" id="catalog-modal-summary">Showing 0 models</span>
           <button class="btn btn-secondary" id="btn-close-catalog-footer">Close</button>
         </div>
@@ -299,4 +376,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-

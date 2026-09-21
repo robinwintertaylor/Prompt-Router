@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 40" width="300" height="40" fill="none">
+  <!-- Parallel Junction Line Art Accent -->
+  <g stroke="#00838F" stroke-width="1.5" opacity="0.6" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Parallel Data Streams -->
+    <path d="M 0 10 L 80 10 L 110 20 L 190 20 L 220 10 L 300 10" />
+    <path d="M 0 20 L 90 20 L 120 20 L 180 20 L 210 20 L 300 20" />
+    <path d="M 0 30 L 80 30 L 110 20 L 190 20 L 220 30 L 300 30" />
+    
+    <!-- Vertical Interception Gateway -->
+    <line x1="150" y1="2" x2="150" y2="38" stroke="#073844" stroke-width="2.5" />
+    <circle cx="150" cy="20" r="4" fill="#C6FF00" stroke="#073844" stroke-width="1.5" />
+  </g>
+</svg>

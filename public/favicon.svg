@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#073844"/>
+  <!-- Vertical Gateway Force -->
+  <rect x="29" y="8" width="6" height="48" rx="3" fill="#0D5C6C"/>
+  <!-- Jev Yellow-Green Flash -->
+  <polygon points="38,10 18,34 32,34 24,54 46,28 32,28" fill="#C6FF00" stroke="#041F25" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>

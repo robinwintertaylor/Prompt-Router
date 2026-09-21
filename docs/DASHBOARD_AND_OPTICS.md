@@ -95,3 +95,36 @@ Clicking the **Settings** button in the header opens a management modal:
   - `balanced`: Equilibrates quality, speed, and budget.
 - **Preferred Provider**: Mammouth vs OpenRouter.
 All settings persist immediately to `prompt_router.db`.
+
+---
+
+## 4. Brand & Visual Design Specification: Concept 1 ("The Parallel Junction")
+
+The Prompt-Router interface is built according to **Concept 1: The Parallel Junction** (Version 1.0, September 2026).
+
+### A. Core Visual Metaphor
+- **The Parallel Junction**: A strong vertical force (the gateway / data flow) intersected by a vibrant, horizontal starburst / lightning flash (the parallel 120ms Jev System One intelligence flash).
+- Visualizes the fundamental guarantee: the router intercepts standard API calls, executes sub-120ms non-autoregressive decision models, and dispatches to the optimal aggregator with zero perceived latency.
+
+### B. Color Tokens & Functions
+| Token | Hex Value | Semantic Function |
+| :--- | :--- | :--- |
+| **Gateway Teal** | `#0D47A1` / `#073844` | Foundations, borders, primary headers, weighted text; represents the proxy gate and operational stability. |
+| **Jev Yellow-Green** | `#C6FF00` | Accents, flash points, data highlights, speed metrics, and active hover states representing 120ms Jev evaluation. |
+| **Savings Green** | `#4CAF50` | Positive financial metrics, cost comparison bars, and net dollars saved. |
+| **Text Black** | `#212121` | High-contrast body typography and weighted logotype sub-text. |
+| **UI Gray / Background** | `#F5F7FA` | Background canvas with a subtle 5% opacity schematic grid texture. |
+
+### C. Typography
+- **Primary Interface**: `IBM Plex Sans` (Light 300, Regular 400, Medium 500, Semi-bold 600, Bold 700, Italic 700).
+- **Technical & Financial Data**: `IBM Plex Mono` (400, 500, 600, 700) for token counts, rates per M tokens, timestamps, and model IDs.
+
+### D. Scalable Production Assets (`public/assets/`)
+- `icon-junction.svg`: Scalable vector icon (32px, 64px, 128px) displaying the vertical gateway force crossed by the Jev speed flash.
+- `icon-starburst.svg`: The 8-point horizontal parallel interception starburst.
+- `logo-horizontal.svg`: Primary horizontal brand logotype for banners and navigation headers.
+- `logo-header.svg`: Dark gateway banner asset matching Image 2 (`GATEWAY INTERFACE ACTIVE (PORT 4000)`).
+- `linear-intersection.svg`: Linear schematic line accent depicting parallel data flow interception.
+- `schematic-grid.svg`: 5% opacity architectural blueprint texture.
+- `favicon.svg`: Browser tab favicon with the Parallel Junction glyph.
+

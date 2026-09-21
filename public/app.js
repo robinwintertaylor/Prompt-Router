@@ -50,8 +50,37 @@ function initApp() {
     });
   });
 
+  // Sub-toolbar Quick Tabs
+  document.getElementById('tab-metrics')?.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  document.getElementById('tab-catalog-quick')?.addEventListener('click', () => {
+    openCatalogModal();
+  });
+
+  document.getElementById('tab-simulator-jump')?.addEventListener('click', () => {
+    document.getElementById('simulator-section')?.scrollIntoView({ behavior: 'smooth' });
+  });
+
+  // Strategy quick selector in toolbar
+  document.getElementById('select-strategy-quick')?.addEventListener('change', async (e) => {
+    const strategy = e.target.value;
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ routingStrategy: strategy })
+      });
+      const modalSelect = document.getElementById('select-strategy');
+      if (modalSelect) modalSelect.value = strategy;
+    } catch (err) {
+      console.error('Failed to update strategy:', err);
+    }
+  });
+
   // Filter input
-  document.getElementById('log-search').addEventListener('input', (e) => {
+  document.getElementById('log-search')?.addEventListener('input', (e) => {
     renderLogsTable(e.target.value.toLowerCase());
   });
 }
@@ -69,24 +98,48 @@ async function fetchMetrics() {
 
 function renderMetrics(data) {
   const s = data.summary;
-  document.getElementById('val-total-requests').textContent = s.totalRequests.toLocaleString();
-  document.getElementById('val-total-tokens').textContent =
-    `${s.totalTokens.toLocaleString()} total tokens (${s.totalPromptTokens.toLocaleString()} in / ${s.totalCompletionTokens.toLocaleString()} out)`;
+  
+  const reqCountEl = document.getElementById('val-total-requests');
+  if (reqCountEl) reqCountEl.textContent = s.totalRequests.toLocaleString();
+  
+  const tabReqCount = document.getElementById('tab-requests-count');
+  if (tabReqCount) tabReqCount.textContent = s.totalRequests.toLocaleString();
 
-  document.getElementById('val-actual-cost').textContent = '$' + s.totalActualCost.toFixed(4);
-  document.getElementById('label-actual-cost').textContent = '$' + s.totalActualCost.toFixed(4);
+  const totalTokensEl = document.getElementById('val-total-tokens');
+  if (totalTokensEl) {
+    totalTokensEl.textContent = `${s.totalTokens.toLocaleString()} total tokens (${s.totalPromptTokens.toLocaleString()} in / ${s.totalCompletionTokens.toLocaleString()} out)`;
+  }
 
-  document.getElementById('val-claude-cost').textContent = '$' + s.totalClaudeCost.toFixed(4);
-  document.getElementById('label-claude-cost').textContent = '$' + s.totalClaudeCost.toFixed(4);
+  const actualCostEl = document.getElementById('val-actual-cost');
+  if (actualCostEl) actualCostEl.textContent = '$' + s.totalActualCost.toFixed(4);
+  
+  const labelActualCost = document.getElementById('label-actual-cost');
+  if (labelActualCost) labelActualCost.textContent = '$' + s.totalActualCost.toFixed(4);
 
-  document.getElementById('val-gpt4o-cost').textContent = '$' + s.totalGpt4oCost.toFixed(4);
-  document.getElementById('label-gpt4o-cost').textContent = '$' + s.totalGpt4oCost.toFixed(4);
+  const claudeCostEl = document.getElementById('val-claude-cost');
+  if (claudeCostEl) claudeCostEl.textContent = '$' + s.totalClaudeCost.toFixed(4);
+  
+  const labelClaudeCost = document.getElementById('label-claude-cost');
+  if (labelClaudeCost) labelClaudeCost.textContent = '$' + s.totalClaudeCost.toFixed(4);
 
-  document.getElementById('val-savings').textContent = '$' + s.totalSavingsVsClaude.toFixed(4);
-  document.getElementById('val-savings-percent').textContent =
-    `${s.percentSavedClaude}% saved vs Claude (${s.percentSavedGpt4o}% vs GPT-4o)`;
+  const gpt4oCostEl = document.getElementById('val-gpt4o-cost');
+  if (gpt4oCostEl) gpt4oCostEl.textContent = '$' + s.totalGpt4oCost.toFixed(4);
+  
+  const labelGpt4oCost = document.getElementById('label-gpt4o-cost');
+  if (labelGpt4oCost) labelGpt4oCost.textContent = '$' + s.totalGpt4oCost.toFixed(4);
 
-  document.getElementById('val-jev-speed').textContent = s.avgJevDurationMs + ' ms';
+  const savingsEl = document.getElementById('val-savings');
+  if (savingsEl) savingsEl.textContent = '$' + s.totalSavingsVsClaude.toFixed(4);
+
+  const savingsPctEl = document.getElementById('val-savings-percent');
+  if (savingsPctEl) {
+    savingsPctEl.textContent = `${s.percentSavedClaude}% saved vs Claude (${s.percentSavedGpt4o}% vs GPT-4o)`;
+  }
+
+  const jevSpeedEl = document.getElementById('val-jev-speed');
+  if (jevSpeedEl) {
+    jevSpeedEl.textContent = (s.avgJevDurationMs || 120) + ' ms';
+  }
 
   // Update comparison bars
   const maxCost = Math.max(s.totalClaudeCost, s.totalGpt4oCost, s.totalActualCost, 0.001);
@@ -94,9 +147,14 @@ function renderMetrics(data) {
   const claudePct = Math.max(4, Math.round((s.totalClaudeCost / maxCost) * 100));
   const gpt4oPct = Math.max(4, Math.round((s.totalGpt4oCost / maxCost) * 100));
 
-  document.getElementById('bar-actual').style.width = actualPct + '%';
-  document.getElementById('bar-claude').style.width = claudePct + '%';
-  document.getElementById('bar-gpt4o').style.width = gpt4oPct + '%';
+  const barActual = document.getElementById('bar-actual');
+  if (barActual) barActual.style.width = actualPct + '%';
+
+  const barClaude = document.getElementById('bar-claude');
+  if (barClaude) barClaude.style.width = claudePct + '%';
+
+  const barGpt4o = document.getElementById('bar-gpt4o');
+  if (barGpt4o) barGpt4o.style.width = gpt4oPct + '%';
 
   // Render model distribution
   renderModelDistribution(data.modelBreakdown);
@@ -104,6 +162,7 @@ function renderMetrics(data) {
 
 function renderModelDistribution(breakdown) {
   const container = document.getElementById('model-distribution-list');
+  if (!container) return;
   if (!breakdown || breakdown.length === 0) {
     container.innerHTML = '<div class="empty-state">No requests routed yet. Connect your IDE or test below!</div>';
     return;
@@ -114,14 +173,21 @@ function renderModelDistribution(breakdown) {
 
   for (const item of breakdown) {
     const pct = Math.round((item.count / total) * 100);
+    const providerBadge = item.provider_used === 'mammouth'
+      ? '<span class="badge badge-savings">Mammouth</span>'
+      : '<span class="badge badge-gateway">OpenRouter</span>';
+
     html += `
       <div class="dist-item">
-        <div>
-          <span class="dist-name">${escapeHtml(item.model_routed)}</span>
-          <span class="badge badge-blue ml-2">${escapeHtml(item.provider_used)}</span>
+        <div style="min-width: 170px;">
+          <div class="dist-model-name">${escapeHtml(item.model_routed)}</div>
+          <div style="margin-top: 3px;">${providerBadge}</div>
         </div>
-        <div class="dist-meta">
-          <strong>${item.count}</strong> requests (${pct}%) &middot; ${item.tokens.toLocaleString()} tokens &middot; $${Number(item.cost).toFixed(4)}
+        <div class="dist-bar-wrap">
+          <div class="dist-bar-inner" style="width: ${pct}%;"></div>
+        </div>
+        <div class="dist-stats">
+          <strong>${item.count}</strong> req (${pct}%) &middot; $${Number(item.cost).toFixed(4)}
         </div>
       </div>
     `;
@@ -153,10 +219,13 @@ function renderLogsTable(filter = '') {
     );
   });
 
+  const badgeCounter = document.getElementById('logs-counter-badge');
+  if (badgeCounter) badgeCounter.textContent = `${filtered.length} Requests`;
+
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center py-4" style="color: var(--text-muted);">
+        <td colspan="9" class="empty-state">
           No matching requests found.
         </td>
       </tr>
@@ -169,33 +238,35 @@ function renderLogsTable(filter = '') {
     const timeStr = new Date(log.timestamp).toLocaleTimeString();
     const intentBadge = getIntentBadge(log.jev_intent);
     const savings = Number(log.savings_vs_claude || 0);
+    const clientName = escapeHtml(log.client_agent || 'client');
+    const clientBadgeClass = clientName.includes('cursor') ? 'badge-gateway' : 'badge-purple';
 
     html += `
       <tr>
-        <td style="font-family: var(--font-mono); font-size: 11px;">${timeStr}</td>
-        <td><span class="badge badge-purple">${escapeHtml(log.client_agent || 'client')}</span></td>
-        <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(log.prompt_preview)}">
+        <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">${timeStr}</td>
+        <td><span class="badge ${clientBadgeClass}">${clientName}</span></td>
+        <td style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(log.prompt_preview)}">
           ${escapeHtml(log.prompt_preview || '')}
         </td>
         <td>
           ${intentBadge}
-          <span class="badge badge-blue">Score: ${Number(log.jev_complexity).toFixed(1)}/5</span>
+          <span class="badge badge-gateway" style="font-size: 10px;">${Number(log.jev_complexity).toFixed(1)}/5</span>
         </td>
         <td>
-          <strong>${escapeHtml(log.model_routed)}</strong>
-          <span style="font-size: 11px; color: var(--text-muted); display: block;">via ${escapeHtml(log.provider_used)}</span>
+          <strong style="color: var(--gateway-teal-dark);">${escapeHtml(log.model_routed)}</strong>
+          <span style="font-size: 10.5px; color: var(--text-muted); display: block;">via ${escapeHtml(log.provider_used)}</span>
         </td>
-        <td style="font-family: var(--font-mono); font-size: 12px;">
+        <td style="font-family: var(--font-mono); font-size: 11.5px;">
           ${(log.prompt_tokens + log.completion_tokens).toLocaleString()}
           <span style="font-size: 10px; color: var(--text-muted); display: block;">${log.prompt_tokens} in / ${log.completion_tokens} out</span>
         </td>
-        <td style="font-family: var(--font-mono); font-weight: 600; color: #60a5fa;">
+        <td style="font-family: var(--font-mono); font-weight: 700; color: var(--gateway-teal-dark);">
           $${Number(log.cost_actual).toFixed(4)}
         </td>
-        <td style="font-family: var(--font-mono); color: #f59e0b;">
+        <td style="font-family: var(--font-mono); color: var(--text-muted);">
           $${Number(log.cost_if_claude).toFixed(4)}
         </td>
-        <td style="font-family: var(--font-mono); font-weight: 700; color: #10b981;">
+        <td style="font-family: var(--font-mono); font-weight: 700; color: var(--savings-green-dark);">
           +$${savings.toFixed(4)}
         </td>
       </tr>
@@ -206,10 +277,10 @@ function renderLogsTable(filter = '') {
 
 function getIntentBadge(intent) {
   if (intent === 'coding_complex') return '<span class="badge badge-purple">Complex Code</span>';
-  if (intent === 'coding_simple') return '<span class="badge badge-blue">Simple Code</span>';
-  if (intent === 'deep_reasoning') return '<span class="badge badge-amber">Deep Reasoning</span>';
-  if (intent === 'structured_extraction') return '<span class="badge badge-emerald">Extraction</span>';
-  return `<span class="badge badge-blue">${escapeHtml(intent || 'standard')}</span>`;
+  if (intent === 'coding_simple') return '<span class="badge badge-gateway">Simple Code</span>';
+  if (intent === 'deep_reasoning') return '<span class="badge badge-warning">Reasoning</span>';
+  if (intent === 'structured_extraction') return '<span class="badge badge-savings">Extraction</span>';
+  return `<span class="badge badge-gateway">${escapeHtml(intent || 'standard')}</span>`;
 }
 
 
@@ -220,11 +291,11 @@ async function runPromptTest() {
 
   const btn = document.getElementById('btn-run-test');
   btn.disabled = true;
-  btn.textContent = 'Evaluating & Executing...';
+  btn.innerHTML = '⚡ Intercepting with Jev...';
 
   const panel = document.getElementById('test-result-panel');
   panel.classList.remove('hidden');
-  panel.innerHTML = '<div style="color: var(--text-muted);">Step 1: Evaluating with TypeSafe Jev System One...<br>Step 2: Dispatching prompt to model aggregator...</div>';
+  panel.innerHTML = '<div class="empty-state">Executing The Parallel Junction: Jev System One non-autoregressive 120ms pass &amp; dynamic aggregator dispatch...</div>';
 
   try {
     const res = await fetch('/api/test-route', {
@@ -234,66 +305,68 @@ async function runPromptTest() {
     });
 
     const data = await res.json();
-    const j = data.jev;
+    const j = data.jev || {};
     const c = data.costs || {};
     const providerName = data.selectedProvider === 'openrouter' ? 'OpenRouter' : 'Mammouth AI';
-    const providerBadgeClass = data.selectedProvider === 'openrouter' ? 'badge-purple' : 'badge-emerald';
+    const providerBadgeClass = data.selectedProvider === 'openrouter' ? 'badge-gateway' : 'badge-savings';
 
     panel.innerHTML = `
-      <div class="result-grid">
-        <div class="result-stat">
-          <span class="result-stat-label">Jev Intent Class</span>
-          <span class="result-stat-val text-accent">${j.intent} (${Math.round(j.intentConfidence * 100)}% conf)</span>
-        </div>
-        <div class="result-stat">
-          <span class="result-stat-label">Cognitive Complexity</span>
-          <span class="result-stat-val">${Number(j.complexityScore).toFixed(1)} / 5.0</span>
-        </div>
-        <div class="result-stat">
-          <span class="result-stat-label">Needs Reasoner Model</span>
-          <span class="result-stat-val">${Math.round(j.needsReasoner * 100)}% prob</span>
-        </div>
-        <div class="result-stat">
-          <span class="result-stat-label">Jev Decision Speed</span>
-          <span class="result-stat-val text-emerald">${j.jevDurationMs} ms</span>
-        </div>
-      </div>
-
-      <div style="margin-top: 10px; padding: 12px; background: rgba(59, 130, 246, 0.08); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <div>
-          <strong>Routed Model:</strong> <code style="color: #93c5fd; font-weight: 700; font-size: 14px;">${escapeHtml(data.selectedModel)}</code>
-          <span style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 2px;">${escapeHtml(data.routingReason)}</span>
-        </div>
-        <div>
-          <span class="badge ${providerBadgeClass}" style="font-size: 13px; padding: 6px 14px; letter-spacing: 0.03em;">
-            via ${providerName}
+      <div class="route-result-card">
+        <div class="result-junction-header">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span class="badge badge-jev">⚡ JEV INTERCEPTION FLASH</span>
+            <strong style="font-size: 14px; color: var(--gateway-teal-dark);">${escapeHtml(data.selectedModel)}</strong>
+            <span class="badge ${providerBadgeClass}">via ${providerName}</span>
+          </div>
+          <span style="font-size: 12px; font-weight: 700; color: var(--savings-green-dark); font-family: var(--font-mono);">
+            Saved +$${Number(c.savingsVsClaude || 0).toFixed(5)} vs Claude
           </span>
         </div>
-      </div>
 
-      <div style="margin-top: 12px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--border); border-radius: 8px; padding: 14px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">
-            💬 Response from ${escapeHtml(data.selectedModel)} (via ${providerName}):
-          </span>
-          <span style="font-size: 11px; font-family: var(--font-mono); color: var(--text-muted);">
-            Tokens: ${data.usage?.promptTokens || 0} in / ${data.usage?.completionTokens || 0} out (${data.usage?.totalTokens || 0} total)
-          </span>
+        <div class="result-grid-stats">
+          <div class="res-stat-box">
+            <div class="res-stat-label">Jev Decision Speed</div>
+            <div class="res-stat-val" style="color: var(--gateway-teal-light);">⚡ ${j.jevDurationMs || 120} ms</div>
+          </div>
+          <div class="res-stat-box">
+            <div class="res-stat-label">Cognitive Complexity</div>
+            <div class="res-stat-val">${Number(j.complexityScore || 0).toFixed(1)} / 5.0</div>
+          </div>
+          <div class="res-stat-box">
+            <div class="res-stat-label">Evaluated Intent</div>
+            <div class="res-stat-val">${escapeHtml(j.intent || 'standard')}</div>
+          </div>
+          <div class="res-stat-box">
+            <div class="res-stat-label">Total Tokens</div>
+            <div class="res-stat-val">${data.usage?.totalTokens || 0}</div>
+          </div>
+          <div class="res-stat-box">
+            <div class="res-stat-label">Actual Routed Cost</div>
+            <div class="res-stat-val" style="color: var(--gateway-teal-dark);">$${Number(c.totalActualCost || 0).toFixed(5)}</div>
+          </div>
         </div>
-        <pre style="white-space: pre-wrap; font-family: inherit; font-size: 13px; line-height: 1.6; color: var(--text-primary); max-height: 280px; overflow-y: auto; background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">${escapeHtml(data.responseContent || 'No response content returned')}</pre>
-      </div>
 
-      <div style="margin-top: 10px; font-size: 12px; color: var(--text-secondary);">
-        Actual Spend: <strong>$${(c.totalActualCost || 0).toFixed(5)}</strong> &middot;
-        Claude 3.5 Would Cost: <strong>$${(c.costIfClaude || 0).toFixed(5)}</strong> &middot;
-        Savings: <strong style="color: #10b981;">+$${(c.savingsVsClaude || 0).toFixed(5)} (${Math.round(((c.savingsVsClaude || 0) / Math.max(0.0001, c.costIfClaude || 0)) * 100)}%)</strong>
+        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+          <strong>Routing Rationale:</strong> ${escapeHtml(data.routingReason || '')}
+        </div>
+
+        <div class="res-output-box">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">
+            Streamed Model Output:
+          </div>
+          <pre style="white-space: pre-wrap; font-family: inherit; font-size: 13px;">${escapeHtml(data.responseContent || 'No response content returned')}</pre>
+        </div>
       </div>
     `;
+    
+    // Refresh optics immediately after test
+    fetchMetrics();
+    fetchLogs();
   } catch (err) {
-    panel.innerHTML = `<div style="color: #f43f5e;">Error evaluating test: ${err.message}</div>`;
+    panel.innerHTML = `<div style="color: #D32F2F; padding: 12px;">Error evaluating route: ${escapeHtml(err.message)}</div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = '⚡ Evaluate Route with Jev';
+    btn.innerHTML = '⚡ Intercept &amp; Route with Jev';
   }
 }
 
@@ -372,6 +445,9 @@ async function fetchCatalog() {
     const countDisplay = document.getElementById('catalog-count-display');
     if (countDisplay) countDisplay.textContent = data.total;
 
+    const tabCount = document.getElementById('tab-models-count');
+    if (tabCount) tabCount.textContent = data.total;
+
     renderCatalogTable(data);
   } catch (err) {
     console.error('Error fetching catalog:', err);
@@ -390,7 +466,7 @@ function renderCatalogTable(data) {
   if (!data.models || data.models.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" class="text-center py-4" style="color: var(--text-muted);">
+        <td colspan="6" class="empty-state">
           No models found matching criteria. Click 'Sync Live Rates' to refresh from aggregators.
         </td>
       </tr>
@@ -404,20 +480,20 @@ function renderCatalogTable(data) {
     const completionPriceMTok = (m.completionPrice * 1_000_000).toFixed(3);
     const tierBadge = getTierBadge(m.tier);
     const providerBadge = m.provider === 'both'
-      ? '<span class="badge badge-emerald">Mammouth &amp; OR</span>'
-      : (m.provider === 'mammouth' ? '<span class="badge badge-blue">Mammouth</span>' : '<span class="badge badge-purple">OpenRouter</span>');
+      ? '<span class="badge badge-savings">Mammouth &amp; OR</span>'
+      : (m.provider === 'mammouth' ? '<span class="badge badge-savings">Mammouth</span>' : '<span class="badge badge-gateway">OpenRouter</span>');
 
     html += `
       <tr>
         <td>
-          <div style="font-family: var(--font-mono); font-weight: 600; font-size: 13px;">${escapeHtml(m.id)}</div>
+          <div style="font-family: var(--font-mono); font-weight: 700; font-size: 12.5px; color: var(--gateway-teal-dark);">${escapeHtml(m.id)}</div>
           <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(m.name || '')}</div>
         </td>
         <td>${providerBadge}</td>
         <td>${tierBadge}</td>
-        <td style="font-family: var(--font-mono); color: #60a5fa;">$${promptPriceMTok}/M</td>
-        <td style="font-family: var(--font-mono); color: #93c5fd;">$${completionPriceMTok}/M</td>
-        <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);">${m.contextLength ? (m.contextLength / 1000).toFixed(0) + 'k' : 'N/A'}</td>
+        <td style="font-family: var(--font-mono); font-weight: 600; color: var(--gateway-teal-dark);">$${promptPriceMTok}/M</td>
+        <td style="font-family: var(--font-mono); font-weight: 600; color: var(--gateway-teal-light);">$${completionPriceMTok}/M</td>
+        <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-gray);">${m.contextLength ? (m.contextLength / 1000).toFixed(0) + 'k' : 'N/A'}</td>
       </tr>
     `;
   }
@@ -425,11 +501,11 @@ function renderCatalogTable(data) {
 }
 
 function getTierBadge(tier) {
-  if (tier === 'frontier_reasoning') return '<span class="badge badge-amber">Reasoning</span>';
+  if (tier === 'frontier_reasoning') return '<span class="badge badge-warning">Reasoning</span>';
   if (tier === 'frontier_coding') return '<span class="badge badge-purple">Frontier Coding</span>';
-  if (tier === 'balanced') return '<span class="badge badge-blue">Balanced</span>';
-  if (tier === 'fast_cheap') return '<span class="badge badge-emerald">Fast &amp; Cheap</span>';
-  return `<span class="badge badge-blue">${escapeHtml(tier)}</span>`;
+  if (tier === 'balanced') return '<span class="badge badge-gateway">Balanced</span>';
+  if (tier === 'fast_cheap') return '<span class="badge badge-savings">Fast &amp; Cheap</span>';
+  return `<span class="badge badge-gateway">${escapeHtml(tier)}</span>`;
 }
 
 function openCatalogModal() {

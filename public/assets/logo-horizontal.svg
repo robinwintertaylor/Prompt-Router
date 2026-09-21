@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 80" width="540" height="80" fill="none">
+  <!-- Container Mark: Parallel Junction Starburst -->
+  <g transform="translate(10, 10)">
+    <rect x="0" y="0" width="96" height="60" rx="12" fill="#073844" />
+    <rect x="44" y="8" width="8" height="44" rx="3" fill="#0D5C6C" />
+    <line x1="10" y1="30" x2="86" y2="30" stroke="#C6FF00" stroke-width="2.5" stroke-linecap="round" />
+    <g transform="translate(48, 30)">
+      <path d="M 0,-15 L 3.5,-4 L 15,0 L 3.5,4 L 0,15 L -3.5,4 L -15,0 L -3.5,-4 Z" fill="#C6FF00" />
+      <circle cx="0" cy="0" r="3" fill="#073844" />
+    </g>
+  </g>
+
+  <!-- Typography: IBM Plex Sans bold logotype -->
+  <text x="124" y="44" font-family="'IBM Plex Sans', -apple-system, sans-serif" font-size="34" font-weight="800" letter-spacing="-0.02em" fill="#073844">PROMPT<tspan fill="#00838F">-ROUTER</tspan></text>
+  
+  <!-- Subtitle -->
+  <text x="126" y="62" font-family="'IBM Plex Sans', -apple-system, sans-serif" font-size="10.5" font-weight="600" letter-spacing="0.12em" fill="#557788">INTELLIGENT LLM ROUTING &amp; COST OPTIMIZATION</text>
+</svg>
