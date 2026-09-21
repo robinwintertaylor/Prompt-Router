@@ -52,11 +52,16 @@ export async function callOpenRouter(body: any, stream = false): Promise<OpenRou
   }
 
   const targetModel = mapToOpenRouterModel(body.model);
-  const forwardBody = {
+  const forwardBody: any = {
     ...body,
     model: targetModel,
     stream: !!stream
   };
+
+  // Guard against OpenRouter 402 error when max_tokens is omitted
+  if (!forwardBody.max_tokens && !forwardBody.max_completion_tokens) {
+    forwardBody.max_tokens = 4096;
+  }
 
   try {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {

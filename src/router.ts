@@ -193,6 +193,12 @@ export async function executeRoutedCompletion(
     }
   }
 
+  if (res.ok) {
+    console.log(`⚡ [Prompt-Router] Success: Routed prompt to model '${model}' via ${activeProvider.toUpperCase()}`);
+  } else {
+    console.warn(`⚠️ [Prompt-Router] Provider error (${activeProvider}): ${res.error}`);
+  }
+
   return {
     providerResponse: res,
     selectedModel: model,

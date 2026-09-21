@@ -126,14 +126,51 @@ export async function syncCatalog(): Promise<{ count: number; error?: string }> 
         if (mamRes.ok) {
           const mamData: any = await mamRes.json();
           const mamModels = mamData.data || [];
+          const insertStmt = db.prepare(`
+            INSERT OR REPLACE INTO models_catalog (
+              id, name, description, provider, prompt_price, completion_price,
+              context_length, supports_reasoning, tier, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `);
+
+          let mamAdded = 0;
           for (const mm of mamModels) {
-            // Update or add Mammouth availability
-            const existing = newCatalog.get(mm.id);
+            const modelId = mm.id;
+            const existing = newCatalog.get(modelId);
             if (existing) {
               existing.provider = 'both';
-              db.prepare(`UPDATE models_catalog SET provider = 'both' WHERE id = ?`).run(mm.id);
+              db.prepare(`UPDATE models_catalog SET provider = 'both' WHERE id = ?`).run(modelId);
+            } else {
+              const tier = classifyModelTier(modelId, mm.name || modelId, '', 0.000001, modelId.includes('r1') || modelId.includes('reason'));
+              insertStmt.run(
+                modelId,
+                mm.name || modelId,
+                'Mammouth AI direct model',
+                'mammouth',
+                0.000001,
+                0.000002,
+                mm.max_input_tokens || 128000,
+                tier === 'frontier_reasoning' ? 1 : 0,
+                tier
+              );
+
+              newCatalog.set(modelId, {
+                id: modelId,
+                name: mm.name || modelId,
+                description: 'Mammouth AI direct model',
+                provider: 'mammouth',
+                promptPrice: 0.000001,
+                completionPrice: 0.000002,
+                contextLength: mm.max_input_tokens || 128000,
+                supportsReasoning: tier === 'frontier_reasoning',
+                tier,
+                updatedAt: new Date().toISOString()
+              });
+              syncedCount++;
+              mamAdded++;
             }
           }
+          console.log(`[Catalog] Ingested ${mamAdded} new models from Mammouth AI (${mamModels.length} total).`);
         }
       } catch (mamErr: any) {
         console.warn('[Catalog] Mammouth models fetch error:', mamErr.message);
