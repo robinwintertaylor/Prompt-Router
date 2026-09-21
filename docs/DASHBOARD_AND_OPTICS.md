@@ -128,3 +128,52 @@ The Prompt-Router interface is built according to **Concept 1: The Parallel Junc
 - `schematic-grid.svg`: 5% opacity architectural blueprint texture.
 - `favicon.svg`: Browser tab favicon with the Parallel Junction glyph.
 
+
+---
+
+## 5. Concept 1 Dark Mode Specification ("The Parallel Junction - Dark Mode Supplement")
+
+Document Version: 1.0 (Dark Mode Supplement - September 2026)
+
+### A. Dark Mode Vision
+Where the light theme emphasizes a crisp interface with architectural clarity, **Dark Mode** emphasizes high-contrast intelligence glowing against a technical grid. The core "Parallel Junction" metaphor transitions from an interception to a stabilized, efficient flow, highlighted by intense, neon-like accents.
+
+### B. Dark Mode Color Palette
+| Token | Hex / RGBA Value | Semantic Function |
+| :--- | :--- | :--- |
+| **Electric Gateway Teal** | `#1E88E5` | Main interactive elements, focused borders, glowing buttons, and primary headers in dark layouts. Functions as a neon/light source. |
+| **Jev Yellow-Green** | `#C6FF00` | Unchanged from light palette; accents, flash points, data highlights, speed metrics, and active hover states (`rgba(198, 255, 0, 0.65)` glow). |
+| **Secondary Savings Teal** | `#0D47A1` | Border accents, secondary data fields, and financial action buttons (transitions from light mode Green to Teal accent in dark mode). |
+| **Text White** | `#FFFFFF` | All standard body copy, descriptions, and weighted logotype text ("PROMPT"). |
+| **Interface Dark Gray** | `#121212` | Foundation canvas of the layout; all panels and schematic grids are built on this tone. |
+| **Panel Surface** | `#161B22` | Slightly elevated container tone for cards, tables, and content panels. |
+| **Light Electric Teal** | `#00E5FF` | Glowing text highlights, search icon glow, active switch text, and metric numbers. |
+
+### C. Typography & Layout Texture
+- **Headings**: `IBM Plex Sans`, Weighted Bold / ALL CAPS, Electric Gateway Teal (`#1E88E5`), with optional Jev Yellow-Green highlights.
+- **Sub-Headings**: Light Weight / Mixed Case, Light Electric Teal (`#00E5FF`) / White.
+- **Body & Technical Data**: `IBM Plex Mono` / `IBM Plex Sans`, Dark Mode Text White (`#FFFFFF`) and Muted Gray (`#B0BEC5`).
+- **Dark Mode Grid Texture**: 5% opacity schematic grid pattern (`rgba(30, 136, 229, 0.05)`) on the `#121212` background to prevent an empty "void" feeling.
+
+### D. Interface Element Samples & Interactive Theme Switcher
+1. **Interactive Theme Switching**:
+   - **Header Banner Switcher**: Instant `[ 🌙 Dark Mode ]` / `[ ☀️ Light Mode ]` toggle button with icon.
+   - **Sub-Toolbar Toggle Switch**: Physical sliding switch (Image 5 specification) featuring an active glowing Electric Teal state with `ACTIVE` status text vs muted `INACTIVE` state.
+   - **Persistence**: Synchronously restored from `localStorage.getItem('prompt_router_theme')` with zero flicker on page refresh, with automatic fallback to `prefers-color-scheme`.
+2. **Buttons**:
+   - **Active (Electric Teal)**: `#1E88E5` with `0 0 14px rgba(30, 136, 229, 0.5)` glow.
+   - **Hover (Yellow-Green)**: `#C6FF00` background with dark text `#041B20` and intense `0 0 16px rgba(198, 255, 0, 0.65)` glow.
+   - **Secondary (Savings Teal)**: `#0D47A1` background with `#1E88E5` border and glowing accent.
+3. **Inputs**:
+   - Technical `#181E24` dark background, `#1E88E5` border, and glowing `#00E5FF` search icon. Focus produces an electric cyan halo.
+4. **Dashboard Cards & Charts**:
+   - `#161B22` technical panels with subtle `#263238` borders. Hover activates an electric teal border glow.
+   - Model distribution bars feature glowing gradient fills (`#1E88E5` to `#00E5FF`) against the dark schematic grid.
+
+### E. Scalable Dark Mode Assets (`public/assets/`)
+- `linear-intersection-dark.svg`: Glowing electric teal parallel streams with `#00E5FF` / `#1E88E5` lines and `#C6FF00` intersection node.
+- `schematic-grid-dark.svg`: Dark schematic grid with electric teal lines at 10% opacity and cyan intersection markers.
+- `logo-horizontal-dark.svg`: Horizontal logo with pure white `PROMPT`, neon yellow `-`, electric teal `ROUTER`, and muted white subtitle.
+- `logo-header-dark.svg`: Banner lockup with electric teal pillar and glowing speed flash.
+- `icon-junction-dark.svg`: High-contrast electric teal gateway pillar crossed by `#C6FF00` 120ms speed flash.
+

@@ -9,6 +9,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,700;1,800&display=swap" rel="stylesheet">
+  <script>
+    (function() {
+      try {
+        var savedTheme = localStorage.getItem('prompt_router_theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = savedTheme ? savedTheme : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <div class="app-wrapper">
@@ -25,7 +35,7 @@
             </svg>
           </div>
           <div class="brand-text-block">
-            <div class="brand-title">PROMPT<span class="junction-dash">-</span>ROUTER</div>
+            <div class="brand-title">PROMPT<span class="junction-dash">-</span><span class="brand-router">ROUTER</span></div>
             <div class="brand-subtitle-active">
               <span class="status-dot-pulse"></span>
               GATEWAY INTERFACE ACTIVE (PORT <span id="port-display">4000</span>)
@@ -42,6 +52,10 @@
           </button>
           <button class="btn btn-secondary" id="btn-open-settings" title="Gateway Configuration">
             ⚙️ Settings
+          </button>
+          <button class="btn btn-theme-toggle" id="btn-theme-toggle" title="Switch Theme (Light / Dark)" aria-label="Toggle Theme">
+            <span class="theme-icon" id="theme-btn-icon">🌙</span>
+            <span class="theme-text" id="theme-btn-text">Dark Mode</span>
           </button>
           <button class="btn btn-gateway" id="btn-refresh" title="Refresh Live Optics">
             🔄 Refresh
@@ -75,6 +89,16 @@
             <option value="balanced">Balanced (Speed & Budget)</option>
           </select>
         </div>
+
+        <!-- Concept 1 Toggle Switch (Image 5: Active state glows teal) -->
+        <div class="theme-switch-container" title="Switch between Light and Dark mode">
+          <span class="theme-switch-label">Dark Mode</span>
+          <label class="switch-toggle" for="theme-checkbox">
+            <input type="checkbox" id="theme-checkbox" aria-label="Toggle Dark Mode">
+            <span class="slider-toggle"></span>
+          </label>
+          <span class="switch-state-text" id="switch-state-label">INACTIVE</span>
+        </div>
       </div>
     </div>
 
@@ -86,7 +110,8 @@
         <div class="section-heading">
           <span>📊 Real-Time Optics &amp; Cost Arbitrage</span>
         </div>
-        <img src="/assets/linear-intersection.svg" class="section-accent-line" alt="Intersection Accent">
+        <img src="/assets/linear-intersection.svg" class="section-accent-line light-only" alt="Intersection Accent">
+        <img src="/assets/linear-intersection-dark.svg" class="section-accent-line dark-only" alt="Intersection Accent">
       </div>
 
       <div class="metrics-grid">
@@ -213,7 +238,8 @@
               Test any prompt to observe the 120ms non-autoregressive Jev interception flash and optimal aggregator routing.
             </p>
           </div>
-          <img src="/assets/linear-intersection.svg" style="height: 18px; opacity: 0.5;" alt="">
+          <img src="/assets/linear-intersection.svg" class="light-only" style="height: 18px; opacity: 0.5;" alt="">
+          <img src="/assets/linear-intersection-dark.svg" class="dark-only" style="height: 18px; opacity: 0.85;" alt="">
         </div>
 
         <textarea id="test-prompt-input" class="sim-textarea" placeholder="Enter a prompt to test (e.g. 'Write a regex for email' or 'Architect a distributed consensus engine with Raft')..."></textarea>
@@ -334,9 +360,9 @@
           </div>
           <button class="modal-close-btn" id="btn-close-catalog">&times;</button>
         </div>
-        <div style="padding: 12px 22px; border-bottom: 1px solid #CFD8DC; display: flex; gap: 12px; align-items: center; background: #F8FAFB;">
+        <div class="catalog-toolbar">
           <input type="text" id="catalog-search" placeholder="Search models by name, slug or description..." class="input-search-styled" style="flex: 1;">
-          <select id="catalog-tier-filter" style="background: #FFFFFF; border: 1px solid #CFD8DC; border-radius: 6px; padding: 7px 12px; color: var(--text-black); font-size: 12.5px;">
+          <select id="catalog-tier-filter" class="catalog-tier-select">
             <option value="all">All Tiers</option>
             <option value="frontier_reasoning">Frontier Reasoning</option>
             <option value="frontier_coding">Frontier Coding</option>

@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initApp() {
+  initTheme();
   fetchMetrics();
   fetchLogs();
   fetchSettings();
@@ -32,7 +33,7 @@ function initApp() {
 
   document.getElementById('btn-open-catalog').addEventListener('click', openCatalogModal);
   document.getElementById('btn-close-catalog').addEventListener('click', closeCatalogModal);
-  document.getElementById('btn-close-catalog-footer').addEventListener('click', closeCatalogModal);
+  document.getElementById('btn-close-catalog-footer')?.addEventListener('click', closeCatalogModal);
   document.getElementById('btn-sync-catalog').addEventListener('click', triggerCatalogSync);
   document.getElementById('btn-modal-sync-catalog').addEventListener('click', triggerCatalogSync);
 
@@ -83,6 +84,59 @@ function initApp() {
   document.getElementById('log-search')?.addEventListener('input', (e) => {
     renderLogsTable(e.target.value.toLowerCase());
   });
+}
+
+// Concept 1 Theme Switcher (Parallel Junction Light / Dark Mode)
+function initTheme() {
+  const savedTheme = localStorage.getItem('prompt_router_theme');
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+  applyTheme(initialTheme);
+
+  // Banner theme button
+  const btnTheme = document.getElementById('btn-theme-toggle');
+  if (btnTheme) {
+    btnTheme.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      applyTheme(current === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  // Subtoolbar toggle switch (Image 5: Active state glows teal)
+  const themeCheckbox = document.getElementById('theme-checkbox');
+  if (themeCheckbox) {
+    themeCheckbox.addEventListener('change', (e) => {
+      applyTheme(e.target.checked ? 'dark' : 'light');
+    });
+  }
+
+  // Listen to OS scheme changes if user hasn't explicitly set localStorage
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      if (!localStorage.getItem('prompt_router_theme')) {
+        applyTheme(e.matches ? 'dark' : 'light');
+      }
+    });
+  }
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('prompt_router_theme', theme);
+
+  const isDark = theme === 'dark';
+  const themeCheckbox = document.getElementById('theme-checkbox');
+  if (themeCheckbox) themeCheckbox.checked = isDark;
+
+  const stateLabel = document.getElementById('switch-state-label');
+  if (stateLabel) {
+    stateLabel.textContent = isDark ? 'ACTIVE' : 'INACTIVE';
+  }
+
+  const btnIcon = document.getElementById('theme-btn-icon');
+  const btnText = document.getElementById('theme-btn-text');
+  if (btnIcon) btnIcon.textContent = isDark ? '☀️' : '🌙';
+  if (btnText) btnText.textContent = isDark ? 'Light Mode' : 'Dark Mode';
 }
 
 async function fetchMetrics() {
