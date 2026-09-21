@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prompt-Router | Jev-Powered Model Router & Optics</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <div class="header-left">
+        <div class="logo-mark">⚡</div>
+        <div>
+          <h1 class="brand-title">Prompt-Router</h1>
+          <p class="brand-subtitle">Powered by TypeSafe Jev System One &middot; Mammouth &middot; OpenRouter</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="status-indicator">
+          <span class="status-dot pulse"></span>
+          <span class="status-text">Gateway Active (Port <span id="port-display">4000</span>)</span>
+        </div>
+        <button class="btn btn-secondary" id="btn-open-settings">⚙️ Settings</button>
+        <button class="btn btn-primary" id="btn-refresh">🔄 Refresh</button>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section class="section">
+        <h2 class="section-title">📊 Real-Time Optics & Cost Comparison</h2>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Total Requests</span>
+              <span class="metric-icon">🚀</span>
+            </div>
+            <div class="metric-value" id="val-total-requests">0</div>
+            <div class="metric-sub" id="val-total-tokens">0 total tokens</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Actual Total Spend</span>
+              <span class="metric-icon">💵</span>
+            </div>
+            <div class="metric-value text-accent" id="val-actual-cost">$0.0000</div>
+            <div class="metric-sub">Includes Jev + Model tokens</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Cost if 100% Claude 3.5</span>
+              <span class="metric-icon">🧠</span>
+            </div>
+            <div class="metric-value text-claude" id="val-claude-cost">$0.0000</div>
+            <div class="metric-sub">Benchmark: $3.00/M in, $15.00/M out</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Cost if 100% GPT-4o</span>
+              <span class="metric-icon">🤖</span>
+            </div>
+            <div class="metric-value text-openai" id="val-gpt4o-cost">$0.0000</div>
+            <div class="metric-sub">Benchmark: $2.50/M in, $10.00/M out</div>
+          </div>
+
+          <div class="metric-card highlight-card">
+            <div class="metric-header">
+              <span class="metric-label">Net Dollars Saved</span>
+              <span class="metric-icon">🎉</span>
+            </div>
+            <div class="metric-value text-emerald" id="val-savings">$0.0000</div>
+            <div class="metric-sub" id="val-savings-percent">0% cost reduction vs Claude</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Avg Jev Routing Latency</span>
+              <span class="metric-icon">⚡</span>
+            </div>
+            <div class="metric-value" id="val-jev-speed">0 ms</div>
+            <div class="metric-sub">Zero-hallucination decision pass</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="two-col-grid">
+        <section class="section card">
+          <h3 class="card-title">💰 Cost Comparison Breakdown</h3>
+          <div class="comparison-bars">
+            <div class="bar-group">
+              <div class="bar-labels">
+                <span>Prompt-Router (Actual)</span>
+                <span id="label-actual-cost">$0.0000</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-bar bar-actual" id="bar-actual" style="width: 20%"></div>
+              </div>
+            </div>
+
+            <div class="bar-group">
+              <div class="bar-labels">
+                <span>If 100% Anthropic Claude 3.5 Sonnet</span>
+                <span id="label-claude-cost">$0.0000</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-bar bar-claude" id="bar-claude" style="width: 100%"></div>
+              </div>
+            </div>
+
+            <div class="bar-group">
+              <div class="bar-labels">
+                <span>If 100% OpenAI GPT-4o</span>
+                <span id="label-gpt4o-cost">$0.0000</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-bar bar-gpt4o" id="bar-gpt4o" style="width: 80%"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section card">
+          <h3 class="card-title">🎯 Model Routing Distribution</h3>
+          <div id="model-distribution-list" class="distribution-list">
+            <div class="empty-state">No requests routed yet. Connect your IDE or test below!</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Live Interactive Playground -->
+      <section class="section card playground-card">
+        <div class="playground-header">
+          <div>
+            <h3 class="card-title">🧪 Interactive Prompt Route Simulator</h3>
+            <p class="card-sub">Test any prompt to see Jev evaluate intent, complexity score, and pick the optimal model in real time.</p>
+          </div>
+        </div>
+        <div class="playground-body">
+          <textarea id="test-prompt-input" rows="3" placeholder="Enter a prompt to test (e.g. 'Write a regex for email' or 'Architect a distributed consensus engine with Raft')..."></textarea>
+          <div class="playground-actions">
+            <button class="btn btn-primary" id="btn-run-test">⚡ Evaluate Route with Jev</button>
+            <div class="preset-buttons">
+              <span class="preset-label">Quick Presets:</span>
+              <button class="btn-chip" data-prompt="Hi, how are you today?">Greeting</button>
+              <button class="btn-chip" data-prompt="Write a Python function to reverse a string in place.">Simple Code</button>
+              <button class="btn-chip" data-prompt="Architect an event-driven microservices system with Kafka and vector clocks.">Complex Code</button>
+              <button class="btn-chip" data-prompt="If 3 cats catch 3 mice in 3 minutes, how many cats are needed to catch 100 mice in 100 minutes? Give mathematical proof.">Deep Reasoning</button>
+            </div>
+          </div>
+          <div id="test-result-panel" class="test-result-panel hidden"></div>
+        </div>
+      </section>
+
+      <!-- Live Request Logs & Optics Stream -->
+      <section class="section card">
+        <div class="table-header-wrap">
+          <div>
+            <h3 class="card-title">📋 Live Request Optics & Audit Trail</h3>
+            <p class="card-sub">Real-time decisions, token analytics, and cost comparisons for every incoming IDE prompt.</p>
+          </div>
+          <div class="filter-wrap">
+            <input type="text" id="log-search" placeholder="Filter requests..." class="input-search">
+          </div>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Client App</th>
+                <th>Prompt Preview</th>
+                <th>Jev Evaluation</th>
+                <th>Routed Model & Provider</th>
+                <th>Tokens</th>
+                <th>Actual Cost</th>
+                <th>Cost if Claude</th>
+                <th>Savings</th>
+              </tr>
+            </thead>
+            <tbody id="logs-table-body">
+              <tr>
+                <td colspan="9" class="text-center py-4">Loading request history...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>⚙️ Gateway Configuration</h3>
+          <button class="btn-close" id="btn-close-settings">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>TypeSafe Jev API Key</label>
+            <input type="password" id="input-typesafe-key" placeholder="ts_live_...">
+            <small>Get your key at <a href="https://typesafe.ai" target="_blank">typesafe.ai</a>. If blank, heuristic evaluation is used.</small>
+          </div>
+
+          <div class="form-group">
+            <label>Mammouth AI API Key (Primary LLM Source)</label>
+            <input type="password" id="input-mammouth-key" placeholder="sk-mammouth-...">
+            <small>Access Claude, GPT-4o, Gemini, DeepSeek at <a href="https://mammouth.ai" target="_blank">mammouth.ai</a>.</small>
+          </div>
+
+          <div class="form-group">
+            <label>OpenRouter API Key (Alternative / Multi-Catalog)</label>
+            <input type="password" id="input-openrouter-key" placeholder="sk-or-v1-...">
+            <small>Access hundreds of models at <a href="https://openrouter.ai" target="_blank">openrouter.ai</a>.</small>
+          </div>
+
+          <div class="form-group">
+            <label>Routing Strategy</label>
+            <select id="select-strategy">
+              <option value="cost_optimized">Cost-Optimized (Saves 60-85% by routing simple tasks to Flash/Mini & reasoning to R1)</option>
+              <option value="performance_optimized">Performance-Optimized (Routes coding to Claude 3.5 Sonnet & hard tasks to GPT-4o)</option>
+              <option value="balanced">Balanced (Balances speed, quality, and budget)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Preferred Downstream Provider</label>
+            <select id="select-provider">
+              <option value="mammouth">Mammouth AI</option>
+              <option value="openrouter">OpenRouter</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="btn-cancel-settings">Cancel</button>
+          <button class="btn btn-primary" id="btn-save-settings">Save Configuration</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
