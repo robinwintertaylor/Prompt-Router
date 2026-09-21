@@ -20,24 +20,34 @@ let memoryCatalog: Map<string, CatalogModel> = new Map();
 export function classifyModelTier(id: string, name: string, description: string, promptPrice: number, supportsReasoning: boolean): CatalogModel['tier'] {
   const lower = (id + ' ' + name + ' ' + description).toLowerCase();
 
-  // 1. Frontier Reasoning
+  // 1. Ultra Fast & Cheap (< $0.20 per million prompt tokens or small/flash models)
   if (
-    supportsReasoning ||
+    (promptPrice <= 0.00000025 && !lower.includes('r1') && !lower.includes('o1') && !lower.includes('o3')) ||
+    (lower.includes('flash') && !lower.includes('r1')) ||
+    lower.includes('mini') ||
+    lower.includes('8b')
+  ) {
+    return 'fast_cheap';
+  }
+
+  // 2. Dedicated Frontier Reasoning (CoT, R1, o1, o3, thinking)
+  if (
     lower.includes('r1') ||
     lower.includes('deepseek-reasoner') ||
     lower.includes('o1') ||
     lower.includes('o3') ||
-    lower.includes('reasoning') ||
-    lower.includes('thinking')
+    lower.includes(':thinking') ||
+    (supportsReasoning && (lower.includes('reason') || lower.includes('qwq')))
   ) {
     return 'frontier_reasoning';
   }
 
-  // 2. Frontier Coding & High Complexity
+  // 3. Frontier Coding & High Complexity
   if (
     lower.includes('claude-3.5-sonnet') ||
     lower.includes('claude-3-5-sonnet') ||
     lower.includes('claude-3.7-sonnet') ||
+    lower.includes('claude-sonnet') ||
     lower.includes('sonnet') ||
     lower.includes('gpt-4o') ||
     lower.includes('opus') ||
@@ -46,11 +56,6 @@ export function classifyModelTier(id: string, name: string, description: string,
     lower.includes('mistral-large')
   ) {
     return 'frontier_coding';
-  }
-
-  // 3. Ultra Fast & Cheap (< $0.20 per million prompt tokens = $0.00000020 per token)
-  if (promptPrice <= 0.00000025 || lower.includes('flash') || lower.includes('mini') || lower.includes('8b')) {
-    return 'fast_cheap';
   }
 
   return 'balanced';

@@ -38,17 +38,22 @@ export function selectOptimalModel(
 
   const catalog = getAllCatalogModels();
 
-  // 1. Extreme Reasoning / Math / Logic Tier
-  if (jev.needsReasoner > 0.65 || jev.complexityScore >= 4.5) {
+  // 1. Dedicated Reasoning Tier (applying TypeSafe Consistency Noul Uncertainty Band 0.30 - 0.70)
+  const isDefiniteReasoner = jev.needsReasoner >= 0.70;
+  const isBorderlineReasoner = jev.needsReasoner >= 0.30 && jev.needsReasoner < 0.70;
+  const isReasoningIntent = jev.intent === 'deep_reasoning';
+  const requiresReasoningModel = isDefiniteReasoner || (isBorderlineReasoner && isReasoningIntent) || (jev.complexityScore >= 4.6 && isReasoningIntent);
+
+  if (requiresReasoningModel) {
     if (catalog.length > 0) {
-      const reasoners = catalog.filter(m => m.tier === 'frontier_reasoning' || m.supportsReasoning);
+      const reasoners = catalog.filter(m => m.tier === 'frontier_reasoning');
       if (reasoners.length > 0) {
         if (strategy === 'cost_optimized') {
           reasoners.sort((a, b) => (a.promptPrice + a.completionPrice) - (b.promptPrice + b.completionPrice));
           const best = reasoners.find(m => m.id.includes('r1') || m.id.includes('deepseek')) || reasoners[0];
           return {
             model: best.id,
-            reason: `Jev detected deep reasoning (score: ${jev.complexityScore}, reasoner prob: ${(jev.needsReasoner * 100).toFixed(0)}%). Selected '${best.name}' from catalog (${best.provider}) at live rate $${(best.promptPrice * 1e6).toFixed(2)}/M in.`,
+            reason: `Jev detected reasoning requirement (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Selected '${best.name}' from catalog (${best.provider}) at live rate $${(best.promptPrice * 1e6).toFixed(2)}/M in.`,
             providerHint: best.provider
           };
         } else {
