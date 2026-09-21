@@ -41,6 +41,22 @@ export function initDatabase() {
       value TEXT,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS models_catalog (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      description TEXT,
+      provider TEXT,
+      prompt_price REAL DEFAULT 0.0,
+      completion_price REAL DEFAULT 0.0,
+      context_length INTEGER DEFAULT 0,
+      supports_reasoning BOOLEAN DEFAULT 0,
+      tier TEXT DEFAULT 'balanced',
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_catalog_tier ON models_catalog(tier);
+    CREATE INDEX IF NOT EXISTS idx_catalog_provider ON models_catalog(provider);
   `);
 }
 

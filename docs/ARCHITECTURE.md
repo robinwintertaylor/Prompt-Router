@@ -61,17 +61,15 @@ It intercepts standard OpenAI API calls (`POST /v1/chat/completions`), extracts 
      - `needs_reasoner` (Noul 0–1): Evaluates need for chain-of-thought models.
    - If Jev is unreachable or `TYPESAFE_API_KEY` is omitted, the router executes an internal heuristic classifier with zero latency penalty.
 
-4. **Target Model & Provider Selection**:
-   - The decision engine (`src/router.ts`) selects the optimal model using the active strategy (`cost_optimized`, `performance_optimized`, or `balanced`).
-   - Provider priority is checked:
-     - If Mammouth AI supports the model and has an active key, it is selected as primary.
-     - Otherwise, OpenRouter is selected.
-     - Seamless automatic failover is performed if the primary provider returns 4xx/5xx or times out.
+4. **Dynamic Model Resolution Across Unified Catalog**:
+   - Jev evaluates the task requirements (intent, cognitive difficulty 1-5, and reasoning needs).
+   - The decision engine (`src/router.ts`) evaluates the synchronized catalog (440+ models from OpenRouter and Mammouth AI) to pick the best model matching those requirements.
+   - Once the model is selected, the router resolves which aggregator hosts that model (Mammouth or OpenRouter) and dispatches the call with automatic failover.
 
 5. **Streaming & Accounting Pipeline**:
    - If `stream: true`, the gateway initiates a Server-Sent Events (`text/event-stream`) connection to the client and immediately pipes upstream chunks.
    - The chunk stream is concurrently monitored to extract token usage or estimate token count.
-   - Upon completion, exact financial metrics are calculated (Actual Spend, Benchmark Claude Cost, Benchmark GPT-4o Cost, Net Savings) and recorded in SQLite.
+   - Upon completion, financial metrics are calculated using the aggregator's live token pricing (stored in `models_catalog`) and recorded in SQLite.
 
 ---
 
@@ -80,6 +78,19 @@ It intercepts standard OpenAI API calls (`POST /v1/chat/completions`), extracts 
 Managed via Node 24's native `node:sqlite` (`DatabaseSync`):
 
 ```sql
+CREATE TABLE models_catalog (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  description TEXT,
+  provider TEXT,
+  prompt_price REAL DEFAULT 0.0,
+  completion_price REAL DEFAULT 0.0,
+  context_length INTEGER DEFAULT 0,
+  supports_reasoning BOOLEAN DEFAULT 0,
+  tier TEXT DEFAULT 'balanced',
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE requests_log (
   id TEXT PRIMARY KEY,
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,

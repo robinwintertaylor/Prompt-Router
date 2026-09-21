@@ -2,6 +2,7 @@ import { initDatabase, getMetrics, getRecentLogs, logRequest } from '../src/db.j
 import { calculateCosts } from '../src/pricing.js';
 import { evaluateWithJev } from '../src/jev.js';
 import { selectOptimalModel } from '../src/router.js';
+import { syncCatalog, getAllCatalogModels, getCatalogModel } from '../src/catalog.js';
 
 async function runTests() {
   console.log('🧪 Starting Prompt-Router verification tests...\n');
@@ -11,8 +12,22 @@ async function runTests() {
   initDatabase();
   console.log('✅ Database initialized successfully.\n');
 
+  // Test 1B: Catalog Synchronization across Aggregators
+  console.log('Test 1B: Synchronizing live model catalog from OpenRouter / Mammouth...');
+  const syncResult = await syncCatalog();
+  console.log(`• Models synchronized: ${syncResult.count}`);
+  const allModels = getAllCatalogModels();
+  if (allModels.length === 0) throw new Error('Catalog sync returned 0 models');
+  console.log(`• Loaded ${allModels.length} models into dynamic catalog cache.`);
+
+  const sampleClaude = getCatalogModel('anthropic/claude-3.5-sonnet');
+  if (sampleClaude) {
+    console.log(`• Live Claude 3.5 Sonnet Rate: $${(sampleClaude.promptPrice * 1e6).toFixed(2)}/M in, $${(sampleClaude.completionPrice * 1e6).toFixed(2)}/M out (${sampleClaude.provider})`);
+  }
+  console.log('✅ Dynamic Catalog Synchronization verified.\n');
+
   // Test 2: Pricing calculations
-  console.log('Test 2: Verifying Cost Calculations & Savings...');
+  console.log('Test 2: Verifying Cost Calculations & Savings with Live Rates...');
   const promptTokens = 1000;
   const completionTokens = 500;
 

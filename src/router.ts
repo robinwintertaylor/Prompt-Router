@@ -3,18 +3,20 @@ import { callMammouth } from './providers/mammouth.js';
 import { callOpenRouter } from './providers/openrouter.js';
 import { getSetting } from './db.js';
 import { config } from './config.js';
+import { getAllCatalogModels, getCatalogModel, CatalogModel } from './catalog.js';
 
 export interface RouteSelection {
   selectedModel: string;
   selectedProvider: 'mammouth' | 'openrouter';
   reasoning: string;
+  catalogModel?: CatalogModel;
 }
 
 export function selectOptimalModel(
   requestedModel: string,
   jev: JevEvaluation,
   strategy: 'cost_optimized' | 'performance_optimized' | 'balanced' = 'cost_optimized'
-): { model: string; reason: string } {
+): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' } {
   const req = (requestedModel || '').toLowerCase();
   const isAuto =
     !req ||
@@ -24,45 +26,79 @@ export function selectOptimalModel(
     req === 'jev' ||
     req === 'jev-smart-router';
 
-  // If client requested an explicit model, keep it unless it is an auto alias
+  // If client requested an explicit model, honor it
   if (!isAuto && req !== 'jev-smart-router') {
+    const existing = getCatalogModel(requestedModel);
     return {
       model: requestedModel,
-      reason: `Client explicitly requested model '${requestedModel}'`
+      reason: `Client explicitly requested model '${requestedModel}'`,
+      providerHint: existing ? existing.provider : undefined
     };
   }
 
+  const catalog = getAllCatalogModels();
+
   // 1. Extreme Reasoning / Math / Logic Tier
   if (jev.needsReasoner > 0.65 || jev.complexityScore >= 4.5) {
-    if (strategy === 'cost_optimized') {
-      return {
-        model: 'deepseek/deepseek-r1',
-        reason: `Jev detected deep reasoning (score: ${jev.complexityScore}, reasoner prob: ${(jev.needsReasoner * 100).toFixed(0)}%). Selected DeepSeek R1 for premier reasoning at 1/5th cost.`
-      };
-    } else {
-      return {
-        model: 'anthropic/claude-3.5-sonnet',
-        reason: `Jev detected frontier complexity (score: ${jev.complexityScore}). Selected Claude 3.5 Sonnet for maximum capability.`
-      };
+    if (catalog.length > 0) {
+      const reasoners = catalog.filter(m => m.tier === 'frontier_reasoning' || m.supportsReasoning);
+      if (reasoners.length > 0) {
+        if (strategy === 'cost_optimized') {
+          reasoners.sort((a, b) => (a.promptPrice + a.completionPrice) - (b.promptPrice + b.completionPrice));
+          const best = reasoners.find(m => m.id.includes('r1') || m.id.includes('deepseek')) || reasoners[0];
+          return {
+            model: best.id,
+            reason: `Jev detected deep reasoning (score: ${jev.complexityScore}, reasoner prob: ${(jev.needsReasoner * 100).toFixed(0)}%). Selected '${best.name}' from catalog (${best.provider}) at live rate $${(best.promptPrice * 1e6).toFixed(2)}/M in.`,
+            providerHint: best.provider
+          };
+        } else {
+          const premier = reasoners.find(m => m.id.includes('sonnet') || m.id.includes('o1') || m.id.includes('r1')) || reasoners[0];
+          return {
+            model: premier.id,
+            reason: `Jev detected frontier reasoning (score: ${jev.complexityScore}). Selected premier model '${premier.name}' from catalog.`,
+            providerHint: premier.provider
+          };
+        }
+      }
     }
+    return {
+      model: strategy === 'cost_optimized' ? 'deepseek/deepseek-r1' : 'anthropic/claude-3.5-sonnet',
+      reason: `Jev detected frontier reasoning (score: ${jev.complexityScore}, reasoner prob: ${(jev.needsReasoner * 100).toFixed(0)}%).`
+    };
   }
 
   // 2. High-End Coding & Complex Refactoring Tier
   if (jev.intent === 'coding_complex' || jev.complexityScore >= 3.6) {
-    if (strategy === 'cost_optimized' && jev.complexityScore < 4.0) {
-      return {
-        model: 'openai/gpt-4o-mini',
-        reason: `Jev detected structured coding task with moderate complexity (score: ${jev.complexityScore}). Routed to GPT-4o-mini for 90%+ cost savings.`
-      };
+    if (catalog.length > 0) {
+      const coders = catalog.filter(m => m.tier === 'frontier_coding');
+      if (coders.length > 0) {
+        const bestCoder = coders.find(m => m.id.includes('sonnet')) || coders.find(m => m.id.includes('gpt-4o')) || coders[0];
+        return {
+          model: bestCoder.id,
+          reason: `Jev classified complex coding (score: ${jev.complexityScore}, intent: ${jev.intent}). Selected '${bestCoder.name}' from catalog (${bestCoder.provider}).`,
+          providerHint: bestCoder.provider
+        };
+      }
     }
     return {
       model: 'anthropic/claude-3.5-sonnet',
-      reason: `Jev classified as complex coding (score: ${jev.complexityScore}, intent: ${jev.intent}). Routed to Claude 3.5 Sonnet.`
+      reason: `Jev classified complex coding (score: ${jev.complexityScore}, intent: ${jev.intent}). Routed to Claude 3.5 Sonnet.`
     };
   }
 
   // 3. Balanced Coding / Structured Extraction / Mid-tier
   if (jev.intent === 'coding_simple' || jev.intent === 'structured_extraction' || jev.complexityScore >= 2.6) {
+    if (catalog.length > 0) {
+      const balanced = catalog.filter(m => m.tier === 'balanced');
+      if (balanced.length > 0) {
+        const bestBalanced = balanced.find(m => m.id.includes('mini') || m.id.includes('flash')) || balanced[0];
+        return {
+          model: bestBalanced.id,
+          reason: `Jev detected standard task (intent: ${jev.intent}, score: ${jev.complexityScore}). Selected '${bestBalanced.name}' from catalog.`,
+          providerHint: bestBalanced.provider
+        };
+      }
+    }
     return {
       model: 'openai/gpt-4o-mini',
       reason: `Jev detected standard task (intent: ${jev.intent}, score: ${jev.complexityScore}). Routed to GPT-4o-mini.`
@@ -70,11 +106,24 @@ export function selectOptimalModel(
   }
 
   // 4. Low-complexity / Factual / Creative / Greetings
+  if (catalog.length > 0) {
+    const cheap = catalog.filter(m => m.tier === 'fast_cheap');
+    if (cheap.length > 0) {
+      cheap.sort((a, b) => (a.promptPrice + a.completionPrice) - (b.promptPrice + b.completionPrice));
+      const fastest = cheap.find(m => m.id.includes('flash')) || cheap[0];
+      return {
+        model: fastest.id,
+        reason: `Jev detected lightweight task (score: ${jev.complexityScore}). Selected '${fastest.name}' from catalog at ultra-low rate.`,
+        providerHint: fastest.provider
+      };
+    }
+  }
   return {
     model: 'google/gemini-2.5-flash',
-    reason: `Jev detected lightweight/conversational task (score: ${jev.complexityScore}). Routed to Gemini 2.5 Flash for ultra-fast response.`
+    reason: `Jev detected lightweight task (score: ${jev.complexityScore}). Routed to Gemini 2.5 Flash.`
   };
 }
+
 
 export async function executeRoutedCompletion(
   body: any,
@@ -89,37 +138,47 @@ export async function executeRoutedCompletion(
   const strategy = (getSetting('ROUTING_STRATEGY', config.routingStrategy) as any) || 'cost_optimized';
   const defaultProvider = (getSetting('DEFAULT_PROVIDER', config.defaultProvider) as any) || 'mammouth';
 
-  const { model, reason } = selectOptimalModel(body.model, jev, strategy);
+  // 1. Jev decides the best model across both aggregators
+  const { model, reason, providerHint } = selectOptimalModel(body.model, jev, strategy);
 
   const mammouthKey = getSetting('MAMMOUTH_API_KEY', config.mammouthApiKey);
   const openrouterKey = getSetting('OPENROUTER_API_KEY', config.openrouterApiKey);
 
+  // 2. Resolve target provider based on model availability in catalog
   let primaryProvider: 'mammouth' | 'openrouter' = defaultProvider;
   let secondaryProvider: 'mammouth' | 'openrouter' = defaultProvider === 'mammouth' ? 'openrouter' : 'mammouth';
 
-  // If primary provider key is missing but secondary is available, swap them
-  if (primaryProvider === 'mammouth' && !mammouthKey && openrouterKey) {
-    primaryProvider = 'openrouter';
-    secondaryProvider = 'mammouth';
-  } else if (primaryProvider === 'openrouter' && !openrouterKey && mammouthKey) {
+  if (providerHint === 'mammouth') {
     primaryProvider = 'mammouth';
     secondaryProvider = 'openrouter';
+  } else if (providerHint === 'openrouter') {
+    primaryProvider = 'openrouter';
+    secondaryProvider = 'mammouth';
+  } else {
+    // Model is available on both aggregators: follow user's preferred default
+    if (primaryProvider === 'mammouth' && !mammouthKey && openrouterKey) {
+      primaryProvider = 'openrouter';
+      secondaryProvider = 'mammouth';
+    } else if (primaryProvider === 'openrouter' && !openrouterKey && mammouthKey) {
+      primaryProvider = 'mammouth';
+      secondaryProvider = 'openrouter';
+    }
   }
 
   const modifiedBody = { ...body, model };
 
-  // Try primary provider
+  // 3. Dispatch to primary provider
   let res = primaryProvider === 'mammouth'
     ? await callMammouth(modifiedBody, stream)
     : await callOpenRouter(modifiedBody, stream);
 
   let activeProvider = primaryProvider;
 
-  // Failover to secondary if primary failed and secondary key exists
+  // 4. Failover to secondary if primary failed
   if (!res.ok) {
     const hasSecondaryKey = secondaryProvider === 'mammouth' ? !!mammouthKey : !!openrouterKey;
     if (hasSecondaryKey) {
-      console.warn(`[Router] Primary provider (${primaryProvider}) failed: ${res.error}. Failing over to ${secondaryProvider}...`);
+      console.warn(`[Router] Primary provider (${primaryProvider}) failed for model ${model}: ${res.error}. Failing over to ${secondaryProvider}...`);
       res = secondaryProvider === 'mammouth'
         ? await callMammouth(modifiedBody, stream)
         : await callOpenRouter(modifiedBody, stream);

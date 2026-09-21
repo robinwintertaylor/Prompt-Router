@@ -4,6 +4,7 @@ import { evaluateWithJev } from '../jev.js';
 import { selectOptimalModel } from '../router.js';
 import { calculateCosts } from '../pricing.js';
 import { config } from '../config.js';
+import { getAllCatalogModels, syncCatalog } from '../catalog.js';
 
 export function handleGetMetrics(req: Request, res: Response) {
   try {
@@ -121,3 +122,46 @@ export function handleUpdateSettings(req: Request, res: Response) {
 
   res.json({ success: true, message: 'Settings updated successfully' });
 }
+
+export function handleGetCatalog(req: Request, res: Response) {
+  try {
+    const search = ((req.query.search as string) || '').toLowerCase();
+    const tier = req.query.tier as string;
+    const provider = req.query.provider as string;
+
+    const allModels = getAllCatalogModels();
+
+    let filtered = allModels;
+    if (search) {
+      filtered = filtered.filter(m =>
+        m.id.toLowerCase().includes(search) ||
+        m.name.toLowerCase().includes(search) ||
+        m.description.toLowerCase().includes(search)
+      );
+    }
+    if (tier && tier !== 'all') {
+      filtered = filtered.filter(m => m.tier === tier);
+    }
+    if (provider && provider !== 'all') {
+      filtered = filtered.filter(m => m.provider === provider || m.provider === 'both');
+    }
+
+    res.json({
+      total: allModels.length,
+      filteredCount: filtered.length,
+      models: filtered.slice(0, 100) // cap to 100 per query
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export async function handleSyncCatalog(req: Request, res: Response) {
+  try {
+    const result = await syncCatalog();
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+

@@ -1,60 +1,59 @@
 # Providers & Models Specification
 
-## 1. Downstream Providers
+## 1. Dynamic Aggregator Model Synchronization
+
+Prompt-Router unifies the catalogs of **Mammouth AI** and **OpenRouter** into a single synchronized repository (over 440+ live models).
+
+**Key Architectural Principle**: **Jev decides the model, not the provider.**  
+The router queries the live catalog from the aggregators on startup and periodically refreshes it. When an incoming request arrives, Jev evaluates the prompt's cognitive difficulty, intent, and reasoning needs. The router then identifies the optimal **model** from the actual catalog. Once the winning model is selected, the router dispatches it to whichever aggregator provides that model (Mammouth AI or OpenRouter), with transparent failover.
 
 ### A. Mammouth AI (`api.mammouth.ai`)
 - **Base URL**: `https://api.mammouth.ai/v1`
 - **Completions Endpoint**: `POST https://api.mammouth.ai/v1/chat/completions`
+- **Models Endpoint**: `GET https://api.mammouth.ai/v1/models`
 - **Authentication**: `Authorization: Bearer <MAMMOUTH_API_KEY>`
-- **Description**: European flat-rate provider offering cost-effective access to tier-1 models with GDPR compliance and zero model training on customer prompts.
-- **Model Translation**:
-  - `anthropic/claude-3.5-sonnet` ➔ `claude-3-5-sonnet-20241022`
-  - `openai/gpt-4o` ➔ `gpt-4o`
-  - `openai/gpt-4o-mini` ➔ `gpt-4o-mini`
-  - `deepseek/deepseek-r1` ➔ `deepseek-reasoner`
-  - `deepseek/deepseek-chat` ➔ `deepseek-chat`
-  - `google/gemini-2.5-flash` ➔ `gemini-2.0-flash`
-  - `google/gemini-2.5-pro` ➔ `gemini-1.5-pro`
+- **Description**: European flat-rate aggregator providing fast access to Claude 3.5/3.7, GPT-4o, Gemini 2.5, and DeepSeek R1 with GDPR compliance and zero model training on customer prompts.
 
 ### B. OpenRouter (`openrouter.ai`)
 - **Base URL**: `https://openrouter.ai/api/v1`
 - **Completions Endpoint**: `POST https://openrouter.ai/api/v1/chat/completions`
+- **Models Endpoint**: `GET https://openrouter.ai/api/v1/models` (Returns 440+ models with real-time prompt & completion prices per token)
 - **Authentication**: `Authorization: Bearer <OPENROUTER_API_KEY>`
 - **Custom Headers**:
-  - `HTTP-Referer`: Site URL (for leaderboard analytics)
+  - `HTTP-Referer`: Site URL
   - `X-OpenRouter-Title`: Site title ("Prompt-Router")
-- **Description**: Multi-catalog developer API with support for hundreds of models, pay-as-you-go billing, and provider fallback redundancy.
 
 ---
 
-## 2. Model Pricing Matrix (Per Million Tokens)
+## 2. Dynamic Model Tiers in the Aggregated Catalog
 
-| Model Name | Input Price / MTok | Output Price / MTok | Role in Prompt-Router |
-| :--- | :--- | :--- | :--- |
-| **TypeSafe Jev** | **$0.042** | **$0.00** | System One Decision Evaluator |
-| **Google Gemini 2.5 Flash** | $0.10 | $0.40 | Ultra-fast / Low-complexity / Greetings |
-| **OpenAI GPT-4o-mini** | $0.15 | $0.60 | Standard Coding & Extraction Tasks |
-| **DeepSeek R1** | $0.55 | $2.19 | Frontier Reasoning / Logic Puzzles |
-| **DeepSeek V3 (Chat)** | $0.14 | $0.28 | Cost-effective conversational tasks |
-| **Mistral Small** | $0.20 | $0.60 | Efficient European fallback |
-| **Anthropic Claude 3.5 Sonnet** | $3.00 | $15.00 | Complex Multi-File Architecture (Benchmark) |
-| **OpenAI GPT-4o** | $2.50 | $10.00 | Complex Systems & Reasoning (Benchmark) |
+When models are synced into the SQLite `models_catalog` table, they are classified into capability tiers:
+
+| Catalog Tier | Description | Representative Synced Models |
+| :--- | :--- | :--- |
+| **`frontier_reasoning`** | Models with dedicated chain-of-thought, mathematical proofs, logic engines | `deepseek/deepseek-r1`, `openai/o1`, `openai/o3-mini`, `anthropic/claude-3.7-sonnet:thinking` |
+| **`frontier_coding`** | Premier models for multi-file architecture, debugging, systems design | `anthropic/claude-3.5-sonnet`, `anthropic/claude-3.7-sonnet`, `openai/gpt-4o` |
+| **`balanced`** | Fast, high-efficiency models for standard coding, single-file edits, data extraction | `openai/gpt-4o-mini`, `google/gemini-2.5-flash`, `mistralai/mistral-small` |
+| **`fast_cheap`** | Ultra-low-cost models for simple greetings, definitions, and high-frequency lookups | `google/gemini-2.5-flash`, `deepseek/deepseek-v4-flash`, `meta-llama/llama-3.1-8b` |
 
 ---
 
-## 3. Financial Optics Calculation
+## 3. Real-Time Financial Accounting Using Aggregator Rates
+
+All reporting and ledger entries use the **real-time per-token rates provided directly by the model aggregators**, rather than hardcoded assumptions:
 
 For every request $i$ with prompt tokens $T_{\text{in}}$ and completion tokens $T_{\text{out}}$:
 
 ### 1. Actual Cost
-$$\text{Cost}_{\text{actual}} = \left(\frac{T_{\text{in}}^{\text{Jev}}}{10^6} \times 0.042\right) + \left(\frac{T_{\text{in}}}{10^6} \times P_{\text{in}}^{\text{model}} + \frac{T_{\text{out}}}{10^6} \times P_{\text{out}}^{\text{model}}\right)$$
+$$\text{Cost}_{\text{actual}} = \left(\frac{T_{\text{in}}^{\text{Jev}}}{10^6} \times 0.042\right) + \left(T_{\text{in}} \times \text{rate}_{\text{prompt}}^{\text{aggregator}} + T_{\text{out}} \times \text{rate}_{\text{completion}}^{\text{aggregator}}\right)$$
 
 ### 2. Benchmark Cost: All Claude 3.5 Sonnet
-$$\text{Cost}_{\text{Claude}} = \left(\frac{T_{\text{in}}}{10^6} \times 3.00\right) + \left(\frac{T_{\text{out}}}{10^6} \times 15.00\right)$$
+$$\text{Cost}_{\text{Claude}} = T_{\text{in}} \times \text{rate}_{\text{prompt}}^{\text{Claude}} + T_{\text{out}} \times \text{rate}_{\text{completion}}^{\text{Claude}}$$
 
 ### 3. Benchmark Cost: All OpenAI GPT-4o
-$$\text{Cost}_{\text{GPT-4o}} = \left(\frac{T_{\text{in}}}{10^6} \times 2.50\right) + \left(\frac{T_{\text{out}}}{10^6} \times 10.00\right)$$
+$$\text{Cost}_{\text{GPT-4o}} = T_{\text{in}} \times \text{rate}_{\text{prompt}}^{\text{GPT-4o}} + T_{\text{out}} \times \text{rate}_{\text{completion}}^{\text{GPT-4o}}$$
 
 ### 4. Net Savings & Percentage Saved
 $$\text{Savings}_{\text{vs Claude}} = \max(0, \text{Cost}_{\text{Claude}} - \text{Cost}_{\text{actual}})$$
 $$\text{Percent Saved} = \frac{\sum \text{Savings}_{\text{vs Claude}}}{\sum \text{Cost}_{\text{Claude}}} \times 100\%$$
+

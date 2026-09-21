@@ -10,6 +10,7 @@ function initApp() {
   fetchMetrics();
   fetchLogs();
   fetchSettings();
+  fetchCatalog();
 
   // Polling every 4 seconds for live optics
   setInterval(() => {
@@ -21,12 +22,22 @@ function initApp() {
   document.getElementById('btn-refresh').addEventListener('click', () => {
     fetchMetrics();
     fetchLogs();
+    fetchCatalog();
   });
 
   document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
   document.getElementById('btn-close-settings').addEventListener('click', closeSettingsModal);
   document.getElementById('btn-cancel-settings').addEventListener('click', closeSettingsModal);
   document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
+
+  document.getElementById('btn-open-catalog').addEventListener('click', openCatalogModal);
+  document.getElementById('btn-close-catalog').addEventListener('click', closeCatalogModal);
+  document.getElementById('btn-close-catalog-footer').addEventListener('click', closeCatalogModal);
+  document.getElementById('btn-sync-catalog').addEventListener('click', triggerCatalogSync);
+  document.getElementById('btn-modal-sync-catalog').addEventListener('click', triggerCatalogSync);
+
+  document.getElementById('catalog-search').addEventListener('input', () => fetchCatalog());
+  document.getElementById('catalog-tier-filter').addEventListener('change', () => fetchCatalog());
 
   document.getElementById('btn-run-test').addEventListener('click', runPromptTest);
 
@@ -323,5 +334,115 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+
+async function fetchCatalog() {
+  try {
+    const search = document.getElementById('catalog-search')?.value || '';
+    const tier = document.getElementById('catalog-tier-filter')?.value || 'all';
+
+    const res = await fetch(`/api/catalog?search=${encodeURIComponent(search)}&tier=${tier}`);
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const countDisplay = document.getElementById('catalog-count-display');
+    if (countDisplay) countDisplay.textContent = data.total;
+
+    renderCatalogTable(data);
+  } catch (err) {
+    console.error('Error fetching catalog:', err);
+  }
+}
+
+function renderCatalogTable(data) {
+  const tbody = document.getElementById('catalog-table-body');
+  const summary = document.getElementById('catalog-modal-summary');
+  if (!tbody) return;
+
+  if (summary) {
+    summary.textContent = `Showing ${data.filteredCount} of ${data.total} synchronized models`;
+  }
+
+  if (!data.models || data.models.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" class="text-center py-4" style="color: var(--text-muted);">
+          No models found matching criteria. Click 'Sync Live Rates' to refresh from aggregators.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  let html = '';
+  for (const m of data.models) {
+    const promptPriceMTok = (m.promptPrice * 1_000_000).toFixed(3);
+    const completionPriceMTok = (m.completionPrice * 1_000_000).toFixed(3);
+    const tierBadge = getTierBadge(m.tier);
+    const providerBadge = m.provider === 'both'
+      ? '<span class="badge badge-emerald">Mammouth &amp; OR</span>'
+      : (m.provider === 'mammouth' ? '<span class="badge badge-blue">Mammouth</span>' : '<span class="badge badge-purple">OpenRouter</span>');
+
+    html += `
+      <tr>
+        <td>
+          <div style="font-family: var(--font-mono); font-weight: 600; font-size: 13px;">${escapeHtml(m.id)}</div>
+          <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(m.name || '')}</div>
+        </td>
+        <td>${providerBadge}</td>
+        <td>${tierBadge}</td>
+        <td style="font-family: var(--font-mono); color: #60a5fa;">$${promptPriceMTok}/M</td>
+        <td style="font-family: var(--font-mono); color: #93c5fd;">$${completionPriceMTok}/M</td>
+        <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);">${m.contextLength ? (m.contextLength / 1000).toFixed(0) + 'k' : 'N/A'}</td>
+      </tr>
+    `;
+  }
+  tbody.innerHTML = html;
+}
+
+function getTierBadge(tier) {
+  if (tier === 'frontier_reasoning') return '<span class="badge badge-amber">Reasoning</span>';
+  if (tier === 'frontier_coding') return '<span class="badge badge-purple">Frontier Coding</span>';
+  if (tier === 'balanced') return '<span class="badge badge-blue">Balanced</span>';
+  if (tier === 'fast_cheap') return '<span class="badge badge-emerald">Fast &amp; Cheap</span>';
+  return `<span class="badge badge-blue">${escapeHtml(tier)}</span>`;
+}
+
+function openCatalogModal() {
+  document.getElementById('catalog-modal').classList.remove('hidden');
+  fetchCatalog();
+}
+
+function closeCatalogModal() {
+  document.getElementById('catalog-modal').classList.add('hidden');
+}
+
+async function triggerCatalogSync() {
+  const syncButtons = [
+    document.getElementById('btn-sync-catalog'),
+    document.getElementById('btn-modal-sync-catalog')
+  ];
+  syncButtons.forEach(b => { if (b) { b.disabled = true; b.textContent = 'Syncing...'; } });
+
+  try {
+    const res = await fetch('/api/catalog/sync', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      alert(`Successfully synchronized ${data.count} models with live aggregator rates!`);
+      fetchCatalog();
+    } else {
+      alert(`Sync failed: ${data.error}`);
+    }
+  } catch (err) {
+    alert(`Sync request failed: ${err.message}`);
+  } finally {
+    syncButtons.forEach(b => {
+      if (b) {
+        b.disabled = false;
+        b.textContent = b.id === 'btn-modal-sync-catalog' ? '🔄 Sync Live Rates' : '🔄 Sync Aggregators';
+      }
+    });
+  }
 }
 

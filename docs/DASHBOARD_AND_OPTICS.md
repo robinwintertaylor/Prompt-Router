@@ -74,6 +74,13 @@ http://localhost:4000/
   - Upstream provider utilized (`mammouth` or `openrouter`).
   - Exact token counts and net dollar savings.
 
+
+### F. Aggregator Models Catalog Browser
+- View over 440+ live models synchronized from OpenRouter and Mammouth AI.
+- Filter by capability tier (`frontier_reasoning`, `frontier_coding`, `balanced`, `fast_cheap`).
+- Inspect real-time prompt and completion rates per million tokens.
+- On-demand "Sync Live Rates" button to update models and pricing directly from aggregator endpoints.
+
 ---
 
 ## 3. Configuration & Settings Modal

@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { initDatabase } from './db.js';
+import { loadCatalogFromDb, syncCatalog } from './catalog.js';
 import { handleChatCompletions } from './routes/completions.js';
 import { handleListModels } from './routes/models.js';
 import {
@@ -11,7 +12,9 @@ import {
   handleGetLogs,
   handleTestRoute,
   handleGetSettings,
-  handleUpdateSettings
+  handleUpdateSettings,
+  handleGetCatalog,
+  handleSyncCatalog
 } from './routes/api.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,6 +22,10 @@ const __dirname = path.dirname(__filename);
 
 // Initialize DB schema
 initDatabase();
+
+// Load cached catalog from DB and kick off background sync with OpenRouter & Mammouth
+loadCatalogFromDb();
+syncCatalog().catch(err => console.warn('[Catalog] Initial sync background notice:', err.message));
 
 const app = express();
 
@@ -50,6 +57,8 @@ app.get('/api/logs', handleGetLogs);
 app.post('/api/test-route', handleTestRoute);
 app.get('/api/settings', handleGetSettings);
 app.post('/api/settings', handleUpdateSettings);
+app.get('/api/catalog', handleGetCatalog);
+app.post('/api/catalog/sync', handleSyncCatalog);
 
 // Dashboard fallback
 app.get(['/', '/dashboard'], (req, res) => {
@@ -66,9 +75,11 @@ app.listen(config.port, config.host, () => {
   • OpenAI API Base URL:  http://localhost:${config.port}/v1
   • Evaluator Model:      Jev System One (api.typesafe.ai)
   • Downstream Providers: Mammouth AI & OpenRouter
+  • Models Catalog:       Dynamic Auto-Syncing (400+ models)
   • Database:             SQLite (node:sqlite)
 =============================================================
   Ready for Goose, Claude Code, Cursor, VS Code, Anti-Gravity!
 =============================================================
   `);
 });
+
