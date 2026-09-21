@@ -11,11 +11,31 @@ export interface RouteSelection {
   reasoning: string;
   catalogModel?: CatalogModel;
 }
+export interface SessionAffinity {
+  anchorModel: string;
+  provider: 'mammouth' | 'openrouter';
+  providerHint?: 'mammouth' | 'openrouter' | 'both';
+  turnCount: number;
+  lastSeen: number;
+}
+
+const sessionAffinityStore = new Map<string, SessionAffinity>();
+
+// Clean up stale sessions after 45 minutes of inactivity
+function purgeStaleSessions() {
+  const cutoff = Date.now() - 45 * 60 * 1000;
+  for (const [id, s] of sessionAffinityStore.entries()) {
+    if (s.lastSeen < cutoff) sessionAffinityStore.delete(id);
+  }
+}
+
 
 export function selectOptimalModel(
   requestedModel: string,
   jev: JevEvaluation,
-  strategy: 'cost_optimized' | 'performance_optimized' | 'balanced' = 'cost_optimized'
+  strategy: 'cost_optimized' | 'performance_optimized' | 'balanced' = 'cost_optimized',
+  sessionId?: string,
+  contextTokens = 0
 ): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' } {
   const req = (requestedModel || '').toLowerCase();
   const isAuto =
@@ -36,7 +56,43 @@ export function selectOptimalModel(
     };
   }
 
+  // Check Cache-Aware Session Continuity & Sticky Affinity
+  if (sessionId && isAuto) {
+    purgeStaleSessions();
+    const session = sessionAffinityStore.get(sessionId);
+    if (session) {
+      // If context is substantial (>12k tokens or turn >= 2 with >6k tokens), avoid cache thrashing
+      const isSubstantialContext = contextTokens >= 12_000 || (session.turnCount >= 2 && contextTokens >= 6_000);
+      const isExtremeReasoner = jev.needsReasoner >= 0.70 || (jev.needsReasoner >= 0.40 && jev.intent === 'deep_reasoning');
+
+      // Hysteresis Rule: maintain cache affinity unless there's an extreme need for a dedicated reasoner
+      if (isSubstantialContext && !isExtremeReasoner) {
+        session.turnCount++;
+        session.lastSeen = Date.now();
+        return {
+          model: session.anchorModel,
+          reason: `Preserving session cache affinity (${contextTokens.toLocaleString()} tokens, turn ${session.turnCount}) on '${session.anchorModel}' to avoid cache-thrashing penalty (75-90% KV prompt cache discount).`,
+          providerHint: session.providerHint
+        };
+      }
+    }
+  }
+
   const catalog = getAllCatalogModels();
+  function finalizeDecision(res: { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' }) {
+    if (sessionId) {
+      const existing = sessionAffinityStore.get(sessionId);
+      sessionAffinityStore.set(sessionId, {
+        anchorModel: res.model,
+        provider: res.providerHint === 'openrouter' ? 'openrouter' : 'mammouth',
+        providerHint: res.providerHint,
+        turnCount: (existing?.turnCount || 0) + 1,
+        lastSeen: Date.now()
+      });
+    }
+    return res;
+  }
+
 
   // 1. Dedicated Reasoning Tier (applying TypeSafe Consistency Noul Uncertainty Band 0.30 - 0.70)
   const isDefiniteReasoner = jev.needsReasoner >= 0.70;
@@ -51,25 +107,25 @@ export function selectOptimalModel(
         if (strategy === 'cost_optimized') {
           reasoners.sort((a, b) => (a.promptPrice + a.completionPrice) - (b.promptPrice + b.completionPrice));
           const best = reasoners.find(m => m.id.includes('r1') || m.id.includes('deepseek')) || reasoners[0];
-          return {
+          return finalizeDecision({
             model: best.id,
             reason: `Jev detected reasoning requirement (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Selected '${best.name}' from catalog (${best.provider}) at live rate $${(best.promptPrice * 1e6).toFixed(2)}/M in.`,
             providerHint: best.provider
-          };
+          });
         } else {
           const premier = reasoners.find(m => m.id.includes('sonnet') || m.id.includes('o1') || m.id.includes('r1')) || reasoners[0];
-          return {
+          return finalizeDecision({
             model: premier.id,
             reason: `Jev detected frontier reasoning (score: ${jev.complexityScore}). Selected premier model '${premier.name}' from catalog.`,
             providerHint: premier.provider
-          };
+          });
         }
       }
     }
-    return {
+    return finalizeDecision({
       model: strategy === 'cost_optimized' ? 'deepseek/deepseek-r1' : 'anthropic/claude-3.5-sonnet',
       reason: `Jev detected frontier reasoning (score: ${jev.complexityScore}, reasoner prob: ${(jev.needsReasoner * 100).toFixed(0)}%).`
-    };
+    });
   }
 
   // 2. High-End Coding & Complex Refactoring Tier
@@ -78,17 +134,17 @@ export function selectOptimalModel(
       const coders = catalog.filter(m => m.tier === 'frontier_coding');
       if (coders.length > 0) {
         const bestCoder = coders.find(m => m.id.includes('sonnet')) || coders.find(m => m.id.includes('gpt-4o')) || coders[0];
-        return {
+        return finalizeDecision({
           model: bestCoder.id,
           reason: `Jev classified complex coding (score: ${jev.complexityScore}, intent: ${jev.intent}). Selected '${bestCoder.name}' from catalog (${bestCoder.provider}).`,
           providerHint: bestCoder.provider
-        };
+        });
       }
     }
-    return {
+    return finalizeDecision({
       model: 'anthropic/claude-3.5-sonnet',
       reason: `Jev classified complex coding (score: ${jev.complexityScore}, intent: ${jev.intent}). Routed to Claude 3.5 Sonnet.`
-    };
+    });
   }
 
   // 3. Balanced Coding / Structured Extraction / Mid-tier
@@ -97,17 +153,17 @@ export function selectOptimalModel(
       const balanced = catalog.filter(m => m.tier === 'balanced');
       if (balanced.length > 0) {
         const bestBalanced = balanced.find(m => m.id.includes('mini') || m.id.includes('flash')) || balanced[0];
-        return {
+        return finalizeDecision({
           model: bestBalanced.id,
           reason: `Jev detected standard task (intent: ${jev.intent}, score: ${jev.complexityScore}). Selected '${bestBalanced.name}' from catalog.`,
           providerHint: bestBalanced.provider
-        };
+        });
       }
     }
-    return {
+    return finalizeDecision({
       model: 'openai/gpt-4o-mini',
       reason: `Jev detected standard task (intent: ${jev.intent}, score: ${jev.complexityScore}). Routed to GPT-4o-mini.`
-    };
+    });
   }
 
   // 4. Low-complexity / Factual / Creative / Greetings
@@ -116,24 +172,26 @@ export function selectOptimalModel(
     if (cheap.length > 0) {
       cheap.sort((a, b) => (a.promptPrice + a.completionPrice) - (b.promptPrice + b.completionPrice));
       const fastest = cheap.find(m => m.id.includes('flash')) || cheap[0];
-      return {
+      return finalizeDecision({
         model: fastest.id,
         reason: `Jev detected lightweight task (score: ${jev.complexityScore}). Selected '${fastest.name}' from catalog at ultra-low rate.`,
         providerHint: fastest.provider
-      };
+      });
     }
   }
-  return {
+  return finalizeDecision({
     model: 'google/gemini-2.5-flash',
     reason: `Jev detected lightweight task (score: ${jev.complexityScore}). Routed to Gemini 2.5 Flash.`
-  };
+  });
 }
 
 
 export async function executeRoutedCompletion(
   body: any,
   jev: JevEvaluation,
-  stream = false
+  stream = false,
+  sessionId?: string,
+  contextTokens = 0
 ): Promise<{
   providerResponse: any;
   selectedModel: string;
@@ -143,13 +201,25 @@ export async function executeRoutedCompletion(
   const strategy = (getSetting('ROUTING_STRATEGY', config.routingStrategy) as any) || 'cost_optimized';
   const defaultProvider = (getSetting('DEFAULT_PROVIDER', config.defaultProvider) as any) || 'mammouth';
 
-  // 1. Jev decides the best model across both aggregators
-  const { model, reason, providerHint } = selectOptimalModel(body.model, jev, strategy);
+  // 1. Jev decides the best model across both aggregators (with session cache affinity)
+  const { model, reason, providerHint } = selectOptimalModel(body.model, jev, strategy, sessionId, contextTokens);
+
+  // 2. Register / update active session anchor
+  if (sessionId) {
+    const existing = sessionAffinityStore.get(sessionId);
+    sessionAffinityStore.set(sessionId, {
+      anchorModel: model,
+      provider: providerHint === 'openrouter' ? 'openrouter' : (providerHint === 'mammouth' ? 'mammouth' : defaultProvider),
+      providerHint,
+      turnCount: (existing?.turnCount || 0) + 1,
+      lastSeen: Date.now()
+    });
+  }
 
   const mammouthKey = getSetting('MAMMOUTH_API_KEY', config.mammouthApiKey);
   const openrouterKey = getSetting('OPENROUTER_API_KEY', config.openrouterApiKey);
 
-  // 2. Resolve target provider based on model availability in catalog
+  // 3. Resolve target provider based on model availability in catalog
   let primaryProvider: 'mammouth' | 'openrouter' = defaultProvider;
   let secondaryProvider: 'mammouth' | 'openrouter' = defaultProvider === 'mammouth' ? 'openrouter' : 'mammouth';
 

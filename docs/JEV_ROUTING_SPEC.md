@@ -107,3 +107,26 @@ If the TypeSafe API is unavailable, network connectivity drops, or `TYPESAFE_API
 - Detects mathematical or reasoning prompts (`prove`, `theorem`, `puzzle`, `logic`, `calculate`).
 - Detects simple greetings and factual queries.
 This guarantees 100% gateway uptime under all conditions.
+
+---
+
+## 5. Multi-Turn State Sampling & Cache Affinity Rules
+
+### A. Sub-Linear Context Sampling
+In traditional LLM setups, feeding an entire 80,000-token conversation to an evaluator adds massive latency ($1\text{s} - 3\text{s}$) and substantial cost.
+
+Prompt-Router addresses this by decoupling **Jev classification state** from **downstream model context**:
+- **Downstream Models**: Receive the complete `messages` array with full conversational context, tool calls, and file attachments.
+- **Jev Evaluator**: Receives a normalized context snapshot (`extractStateFromMessages`):
+  1. The system prompt (operational constraints and developer instructions).
+  2. The active user query (`promptPreview`).
+  3. The last 5 conversational turns (`messages.slice(-5)`) to discern intent trajectory.
+- **Result**: Jev evaluation consumes only 300 to 800 tokens per evaluation, costing a negligible **$0.00001 to $0.00003**, regardless of whether the developer has 5,000 or 150,000 tokens of repository context in the conversation.
+
+### B. Dynamic Routing vs. Anchor Continuity Matrix
+| Context Scale | Jev Intent & Score | Routing Action | Economic Rationale |
+| :--- | :--- | :--- | :--- |
+| **$< 12{,}000$ tokens** | Any | Dynamic Model Selection | Context is small; cache eviction penalty is negligible ($< \$0.003$). Maximize model specialization. |
+| **$\ge 12{,}000$ tokens** | Standard coding, chat, lookup | **Sticky Anchor Affinity** | Preserves 75%–90% KV prompt cache discount on anchor model ($0.30/M vs $3.00/M). Prevents cache-thrashing penalty. |
+| **$\ge 12{,}000$ tokens** | $\text{needs\_reasoner} \ge 0.70$ | **Hysteresis Override $\rightarrow$ DeepSeek R1** | The task requires extended chain-of-thought mathematical proof or formal logic; model capability outweighs cache retention. |
+

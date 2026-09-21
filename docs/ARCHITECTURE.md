@@ -121,3 +121,38 @@ CREATE TABLE settings (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+---
+
+## 4. Multi-Turn Session Continuity & Cache Affinity Architecture
+
+When IDE clients (Cursor, Claude Code, Goose, Cline) engage in iterative software engineering, conversations rapidly accumulate 20,000 to 120,000 tokens of context (file reads, compiler outputs, terminal logs, and unified diffs).
+
+### A. The Cache Thrashing Dilemma
+All major frontier LLM providers implement **KV Prompt Caching**:
+- **Anthropic Claude 3.5 Sonnet**: $3.00/M base prompt input $\rightarrow$ **$0.30/M cached input** (90% discount).
+- **DeepSeek R1 / V3**: $0.55/M base prompt input $\rightarrow$ **$0.07/M cached input** (87% discount).
+- **OpenAI GPT-4o**: $2.50/M base prompt input $\rightarrow$ **$1.25/M cached input** (50% discount).
+
+If a router switches models mid-thread (e.g. from Claude Sonnet to Gemini Flash for a simple follow-up, then back to Claude), it incurs two major penalties:
+1. **Cache Invalidation**: The prompt cache on the primary model is invalidated.
+2. **Context Ingestion Overhead**: Re-evaluating 80k uncached tokens on an alternative model ($0.012–$0.035) plus re-populating the cache on the anchor model ($3.75/M cache write) costs **10x more** than simply paying for 80k cached tokens on the incumbent anchor model ($0.024).
+
+### B. Session Fingerprinting Engine
+Prompt-Router tracks conversational threads through deterministic identification:
+1. **Client Session Headers**: Explicit `X-Session-ID`, `Session-ID`, or `Conversation-ID` headers sent by IDE agents.
+2. **Root Conversation Hashing**: If headers are omitted, the router computes a SHA-256 fingerprint from the immutable conversation root:
+   $$\text{Seed} = \text{System Prompt} \parallel \text{First User Message}$$
+   $$\text{Session ID} = \text{SHA256}(\text{Seed})[0..16]$$
+
+### C. Hysteresis Decision Rules
+Within `src/router.ts`, Prompt-Router balances model specialization against cache economics:
+- **Short Contexts ($< 12{,}000$ tokens)**: Jev routes dynamically across all 540+ catalog models without restriction.
+- **Large Contexts ($\ge 12{,}000$ tokens or turn $\ge 2$ with $\ge 6{,}000$ tokens)**: The router enforces **Sticky Anchor Affinity**, routing to the incumbent model to maintain the 75%–90% prompt cache discount.
+- **Hysteresis Override**: Affinity is broken *only* if Jev evaluates a definitive need for extended chain-of-thought reasoning ($\text{needs\_reasoner} \ge 0.70$), in which case the router intentionally transfers the context to DeepSeek R1.
+
+### D. In-Band Threads vs Out-of-Band Satellite Tasks
+Prompt-Router differentiates between:
+- **In-Band Thread Turns**: Multi-turn coding conversations that carry the full repository context. These remain anchored.
+- **Out-of-Band Satellite Tasks**: Standalone queries (git commit message generation, documentation lookup, single-line completions). Because they carry only a few hundred tokens of context, Jev freely dispatches them to ultra-cheap models (Gemini 2.5 Flash, GPT-4o-mini) without touching the main thread's cache.
+

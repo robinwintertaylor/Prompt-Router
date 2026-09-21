@@ -126,6 +126,38 @@ for chunk in stream:
 
 ---
 
+## 7. Multi-Turn Session Continuity & Cache Affinity in IDE Clients
+
+When using Prompt-Router with coding tools that manage long multi-turn sessions (e.g. Cursor Chat, Claude Code, Goose, or Continue):
+
+### Automatic Zero-Config Session Affinity
+You do not need to configure anything in your IDE client. Prompt-Router automatically tracks multi-turn conversational threads using **Root Message Fingerprinting**:
+- It computes a SHA-256 hash of the initial system prompt and root user prompt.
+- As the session context expands beyond **$12{,}000$ tokens**, the router locks in **Sticky Session Affinity** to the initial anchor model (e.g. Claude 3.5 Sonnet).
+- This ensures follow-up turns take advantage of **75%–90% KV prompt caching discounts** at the provider level, eliminating cache-thrashing penalties.
+
+### Explicit Session Headers (SDKs and Custom Agents)
+If you are developing custom agentic harnesses or scripts, you can optionally pass explicit session identifiers via HTTP headers:
+
+```python
+# Python SDK Example with Session Continuity
+response = client.chat.completions.create(
+    model="auto",
+    messages=conversation_messages,
+    extra_headers={
+        "X-Session-ID": "project-refactor-session-42"
+    }
+)
+```
+
+Supported headers include:
+- `X-Session-ID`
+- `Session-ID`
+- `Conversation-ID`
+
+
+---
+
 ## 7. Node.js Application Example
 
 ```typescript

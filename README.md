@@ -13,11 +13,16 @@
 - **Dual Downstream Providers**:
   - **Mammouth AI** (`api.mammouth.ai`): French subscription/flat-rate aggregator providing Claude 3.5 Sonnet, GPT-4o, Gemini 2.5, DeepSeek, and Mistral.
   - **OpenRouter** (`openrouter.ai`): Multi-catalog developer API with automatic fallback.
-- **Optics & Cost Comparison Dashboard**:
+- **Optics & Cost Comparison Dashboard (Concept 1: The Parallel Junction)**:
   - Live token metrics (prompt tokens in, completion tokens out).
   - Actual expenditure vs. hypothetical costs if **100% of queries went to Claude 3.5 Sonnet** or **100% to OpenAI GPT-4o**.
   - Net dollars saved and percentage cost reduction in real-time.
   - Interactive prompt simulator playground.
+  - Full **Concept 1: The Parallel Junction** theme system with instant two-way **Light & Dark Mode** switching and persistent state.
+- **Multi-Turn Continuity & KV Cache Affinity**:
+  - Automatically avoids the "Cache Thrashing Paradox" on long coding threads (Cursor, Claude Code, Goose).
+  - Detects session state and anchors long contexts ($>12\text{k}$ tokens) to the incumbent anchor model to exploit **75%–90% prompt caching discounts**.
+  - Intelligent hysteresis override allows switching to dedicated reasoning models (like DeepSeek R1) when complex logic is demanded.
 
 ---
 
@@ -159,6 +164,28 @@ $$\text{Savings vs Claude} = \max(0, \text{Cost}_{\text{Claude 3.5}} - \text{Act
 $$\text{Savings vs GPT-4o} = \max(0, \text{Cost}_{\text{GPT-4o}} - \text{Actual Cost})$$
 
 These metrics are saved automatically to `prompt_router.db` and rendered on the live dashboard.
+
+---
+
+## 🔄 Multi-Turn Continuity & KV Cache Affinity
+
+In long agentic coding sessions (such as within Cursor, Claude Code, or Goose), conversations accumulate tens of thousands of tokens of history (file reads, tool calls, terminal outputs, and code diffs).
+
+### The Cache Thrashing Paradox
+Modern frontier models offer **KV Prompt Caching discounts of 75%–90%** (e.g. Anthropic charges $0.30/M for cached prompt inputs vs $3.00/M uncached; DeepSeek charges $0.07/M cached vs $0.55/M).
+
+If an LLM router naively evaluates every multi-turn request in isolation and switches models mid-session for a minor query, severe economic penalties occur:
+1. **Cache Invalidation**: Switching providers breaks the KV cache on both aggregators, throwing away accumulated context discounts.
+2. **Context Ingestion Penalty**: Ingesting 80,000 uncached tokens on a "cheaper" model often costs significantly more than paying for 80,000 cached tokens on the active anchor model ($0.024 on cached Sonnet vs $0.035+ on uncached alternative plus subsequent re-cache penalty).
+
+### Prompt-Router's Solution: Cache-Aware Sticky Routing with Hysteresis
+Prompt-Router resolves this challenge through **Session Fingerprinting & Cache-Aware Hysteresis**:
+
+1. **Lightweight Jev Sampling**: Jev evaluates prompt trajectory and intent by inspecting only the system prompt and the most recent conversational turns (`messages.slice(-5)`). This keeps Jev's evaluation cost negligible (~$0.00003 per turn) while ensuring sub-120ms classification speed.
+2. **Context Watermarking**:
+   - **Short Threads ($< 12\text{k}$ tokens)**: Jev dynamically selects the optimal model turn-by-turn to maximize price/performance arbitrage.
+   - **Substantial Threads ($\ge 12\text{k}$ tokens)**: Prompt-Router activates **Sticky Session Affinity**, keeping subsequent turns anchored to the active model (e.g., Claude 3.5 Sonnet) to exploit the 75%–90% KV prompt cache discount.
+3. **Hysteresis Reasoning Override**: Session affinity is only overridden if Jev detects an extreme requirement for formal mathematical or chain-of-thought reasoning ($\text{needs\_reasoner} \ge 0.70$), in which case the task is dispatched to DeepSeek R1.
 
 ---
 

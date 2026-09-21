@@ -18,6 +18,29 @@ export function detectClientAgent(req: Request): string {
   if (ua.includes('node') || ua.includes('axios')) return 'node-client';
   return 'general-client';
 }
+export function extractSessionId(req: Request, messages: any[]): string {
+  const headerId = req.headers['x-session-id'] || req.headers['session-id'] || req.headers['conversation-id'];
+  if (typeof headerId === 'string' && headerId.trim()) return headerId.trim();
+
+  if (Array.isArray(messages) && messages.length > 0) {
+    // Generate root conversation hash from first user message and system message
+    const firstUser = messages.find(m => m.role === 'user');
+    const systemMsg = messages.find(m => m.role === 'system');
+    const firstUserText = typeof firstUser?.content === 'string'
+      ? firstUser.content
+      : JSON.stringify(firstUser?.content || '');
+    const systemText = typeof systemMsg?.content === 'string'
+      ? systemMsg.content
+      : JSON.stringify(systemMsg?.content || '');
+
+    const seed = `${systemText}|${firstUserText}`;
+    if (seed.length > 10) {
+      return crypto.createHash('sha256').update(seed).digest('hex').slice(0, 16);
+    }
+  }
+  return '';
+}
+
 
 export async function handleChatCompletions(req: Request, res: Response) {
   const startTime = Date.now();
@@ -27,13 +50,15 @@ export async function handleChatCompletions(req: Request, res: Response) {
   const isStream = !!req.body.stream;
 
   const { promptPreview, stateText } = extractStateFromMessages(req.body.messages || []);
+  const contextTokens = Math.ceil(JSON.stringify(req.body.messages || []).length / 4);
+  const sessionId = extractSessionId(req, req.body.messages || []);
 
   // 1. Evaluate with TypeSafe Jev System One
   const jev = await evaluateWithJev(req.body.messages || []);
 
-  // 2. Select optimal model & target provider
+  // 2. Select optimal model & target provider (with Session Cache Affinity)
   const { providerResponse, selectedModel, selectedProvider, routingReason } =
-    await executeRoutedCompletion(req.body, jev, isStream);
+    await executeRoutedCompletion(req.body, jev, isStream, sessionId, contextTokens);
 
   // If both providers are unconfigured / failed
   if (!providerResponse.ok) {

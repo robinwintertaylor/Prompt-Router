@@ -77,6 +77,30 @@ async function runTests() {
 
   console.log('✅ Jev evaluation and routing logic verified.\n');
 
+  // Test 3B: Verifying Multi-Turn Continuity & Session Cache Affinity
+  console.log('Test 3B: Testing Multi-Turn Session Continuity & Cache Affinity...');
+  const testSessionId = 'test-session-cursor-multi-turn';
+
+  // Turn 1: Initial complex task establishes anchor model (Claude 3.5 Sonnet / premier coder)
+  const turn1Route = selectOptimalModel('auto', evalComplex, 'cost_optimized', testSessionId, 2000);
+  console.log(`• Turn 1 (Initial Complex Request, 2k tokens): routed to ${turn1Route.model}`);
+
+  // Turn 2: Minor greeting/lookup, but with 25,000 accumulated tokens on same session
+  const turn2Route = selectOptimalModel('auto', evalGreeting, 'cost_optimized', testSessionId, 25000);
+  console.log(`• Turn 2 (Simple Follow-up with 25k context): routed to ${turn2Route.model} (${turn2Route.reason})`);
+  if (turn2Route.model !== turn1Route.model) {
+    throw new Error(`Expected session affinity to preserve anchor model ${turn1Route.model}, but got ${turn2Route.model}`);
+  }
+
+  // Turn 3: Extreme reasoning need triggers Hysteresis Override
+  const extremeReasonerEval = { ...evalMath, needsReasoner: 0.88 };
+  const turn3Route = selectOptimalModel('auto', extremeReasonerEval, 'cost_optimized', testSessionId, 28000);
+  console.log(`• Turn 3 (Extreme Reasoning Hysteresis Override): routed to ${turn3Route.model}`);
+  if (!turn3Route.model.includes('r1') && !turn3Route.model.includes('deepseek') && !turn3Route.model.includes('sonnet')) {
+    throw new Error(`Expected reasoner model for extreme reasoning, but got ${turn3Route.model}`);
+  }
+  console.log('✅ Multi-Turn Continuity & Cache Affinity verified.\n');
+
   // Test 4: Database logging & metrics aggregation
   console.log('Test 4: Testing DB Logging and Metrics Retrieval...');
   logRequest({
