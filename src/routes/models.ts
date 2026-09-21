@@ -13,6 +13,16 @@ export function handleListModels(req: Request, res: Response) {
       description: 'Jev System One Intelligent Dynamic Router (Auto-selects optimal model per prompt)'
     },
     {
+      id: 'prompt-router',
+      object: 'model',
+      created: 1726876800,
+      owned_by: 'prompt-router',
+      permission: [],
+      root: 'prompt-router',
+      parent: null,
+      description: 'Jev System One Intelligent Dynamic Router'
+    },
+    {
       id: 'jev-smart-router',
       object: 'model',
       created: 1726876800,
@@ -32,6 +42,15 @@ export function handleListModels(req: Request, res: Response) {
       parent: null
     },
     {
+      id: 'claude-3.5-sonnet',
+      object: 'model',
+      created: 1726876800,
+      owned_by: 'anthropic',
+      permission: [],
+      root: 'claude-3.5-sonnet',
+      parent: null
+    },
+    {
       id: 'openai/gpt-4o',
       object: 'model',
       created: 1726876800,
@@ -41,7 +60,25 @@ export function handleListModels(req: Request, res: Response) {
       parent: null
     },
     {
+      id: 'gpt-4o',
+      object: 'model',
+      created: 1726876800,
+      owned_by: 'openai',
+      permission: [],
+      root: 'gpt-4o',
+      parent: null
+    },
+    {
       id: 'openai/gpt-4o-mini',
+      object: 'model',
+      created: 1726876800,
+      owned_by: 'openai',
+      permission: [],
+      root: 'gpt-4o-mini',
+      parent: null
+    },
+    {
+      id: 'gpt-4o-mini',
       object: 'model',
       created: 1726876800,
       owned_by: 'openai',
@@ -92,3 +129,19 @@ export function handleListModels(req: Request, res: Response) {
     data: models
   });
 }
+
+export function handleGetModel(req: Request, res: Response) {
+  const modelId = (req.params as any)[0] || (req.params as any).model || 'auto';
+  console.log(`📡 [Models API] Client verified model existence: '${modelId}'`);
+
+  res.json({
+    id: modelId,
+    object: 'model',
+    created: 1726876800,
+    owned_by: 'prompt-router',
+    permission: [],
+    root: modelId,
+    parent: null
+  });
+}
+

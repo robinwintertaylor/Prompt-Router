@@ -5,6 +5,12 @@ import fs from 'fs';
 const DB_PATH = path.resolve(process.cwd(), 'prompt_router.db');
 export const db = new DatabaseSync(DB_PATH);
 
+// Enable WAL mode and busy timeout for high-concurrency non-blocking access
+try {
+  db.exec('PRAGMA journal_mode = WAL;');
+  db.exec('PRAGMA busy_timeout = 5000;');
+} catch (_) {}
+
 // Initialize schema
 export function initDatabase() {
   db.exec(`
@@ -84,42 +90,46 @@ export interface RequestLogEntry {
 }
 
 export function logRequest(entry: RequestLogEntry) {
-  const stmt = db.prepare(`
-    INSERT OR REPLACE INTO requests_log (
-      id, client_agent, model_requested, model_routed, provider_used,
-      jev_intent, jev_complexity, jev_confidence, jev_needs_reasoner,
-      prompt_tokens, completion_tokens, total_tokens, duration_ms, jev_duration_ms,
-      cost_jev, cost_actual, cost_if_claude, cost_if_gpt4o, savings_vs_claude, prompt_preview
-    ) VALUES (
-      ?, ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?
-    )
-  `);
+  try {
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO requests_log (
+        id, client_agent, model_requested, model_routed, provider_used,
+        jev_intent, jev_complexity, jev_confidence, jev_needs_reasoner,
+        prompt_tokens, completion_tokens, total_tokens, duration_ms, jev_duration_ms,
+        cost_jev, cost_actual, cost_if_claude, cost_if_gpt4o, savings_vs_claude, prompt_preview
+      ) VALUES (
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?
+      )
+    `);
 
-  stmt.run(
-    entry.id,
-    entry.client_agent,
-    entry.model_requested,
-    entry.model_routed,
-    entry.provider_used,
-    entry.jev_intent,
-    entry.jev_complexity,
-    entry.jev_confidence,
-    entry.jev_needs_reasoner,
-    entry.prompt_tokens,
-    entry.completion_tokens,
-    entry.total_tokens,
-    entry.duration_ms,
-    entry.jev_duration_ms,
-    entry.cost_jev,
-    entry.cost_actual,
-    entry.cost_if_claude,
-    entry.cost_if_gpt4o,
-    entry.savings_vs_claude,
-    entry.prompt_preview
-  );
+    stmt.run(
+      entry.id,
+      entry.client_agent,
+      entry.model_requested,
+      entry.model_routed,
+      entry.provider_used,
+      entry.jev_intent,
+      entry.jev_complexity,
+      entry.jev_confidence,
+      entry.jev_needs_reasoner,
+      entry.prompt_tokens,
+      entry.completion_tokens,
+      entry.total_tokens,
+      entry.duration_ms,
+      entry.jev_duration_ms,
+      entry.cost_jev,
+      entry.cost_actual,
+      entry.cost_if_claude,
+      entry.cost_if_gpt4o,
+      entry.savings_vs_claude,
+      entry.prompt_preview
+    );
+  } catch (err: any) {
+    console.warn('[DB] Non-blocking warning: Failed to record request log:', err.message);
+  }
 }
 
 export function getMetrics() {

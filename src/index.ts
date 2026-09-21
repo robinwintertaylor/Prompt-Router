@@ -6,7 +6,7 @@ import { config } from './config.js';
 import { initDatabase } from './db.js';
 import { loadCatalogFromDb, syncCatalog } from './catalog.js';
 import { handleChatCompletions } from './routes/completions.js';
-import { handleListModels } from './routes/models.js';
+import { handleListModels, handleGetModel } from './routes/models.js';
 import {
   handleGetMetrics,
   handleGetLogs,
@@ -66,6 +66,8 @@ app.get(['/health', '/v1/health'], (req, res) => {
 // OpenAI Protocol Endpoints
 app.post(['/v1/chat/completions', '/chat/completions'], handleChatCompletions);
 app.get(['/v1/models', '/models'], handleListModels);
+app.get(['/v1/models/:model', '/models/:model'], handleGetModel);
+app.get(['/v1/models/:vendor/:model', '/models/:vendor/:model'], handleGetModel);
 
 // Dashboard Optics APIs
 app.get('/api/metrics', handleGetMetrics);
