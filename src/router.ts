@@ -57,29 +57,62 @@ export function selectOptimalModel(
     };
   }
 
-  // Check Cache-Aware Session Continuity & Sticky Affinity
+  const catalog = getAllCatalogModels();
+
+  // 1. Calculate unconstrained optimal candidate model from Jev evaluation
+  const candidate = evaluateCandidateModel(jev, strategy, catalog);
+
+  // 2. Break-Even Cache Affinity Evaluation for active multi-turn sessions
   if (sessionId && isAuto) {
     purgeStaleSessions();
     const session = sessionAffinityStore.get(sessionId);
     if (session) {
-      // If context is substantial (>12k tokens or turn >= 2 with >6k tokens), avoid cache thrashing
-      const isSubstantialContext = contextTokens >= 12_000 || (session.turnCount >= 2 && contextTokens >= 6_000);
       const isExtremeReasoner = jev.needsReasoner >= 0.70 || (jev.needsReasoner >= 0.40 && jev.intent === 'deep_reasoning');
 
-      // Hysteresis Rule: maintain cache affinity unless there's an extreme need for a dedicated reasoner
-      if (isSubstantialContext && !isExtremeReasoner) {
-        session.turnCount++;
-        session.lastSeen = Date.now();
-        return {
-          model: session.anchorModel,
-          reason: `Preserving session cache affinity (${contextTokens.toLocaleString()} tokens, turn ${session.turnCount}) on '${session.anchorModel}' to avoid cache-thrashing penalty (75-90% KV prompt cache discount).`,
-          providerHint: session.providerHint
-        };
+      // Hysteresis Rule: dedicated reasoning model always overrides anchor
+      if (!isExtremeReasoner) {
+        if (session.anchorModel === candidate.model) {
+          session.turnCount++;
+          session.lastSeen = Date.now();
+          return {
+            model: session.anchorModel,
+            reason: `Preserving session cache affinity on active anchor '${session.anchorModel}' (${contextTokens.toLocaleString()} tokens, turn ${session.turnCount}).`,
+            providerHint: session.providerHint
+          };
+        }
+
+        // Context check: evaluate break-even cache economics
+        if (contextTokens >= 4_000) {
+          const anchorModelData = getCatalogModel(session.anchorModel);
+          const candidateModelData = getCatalogModel(candidate.model);
+
+          // Standard 85% prompt cache read discount for anchor
+          const anchorBaseRate = anchorModelData?.promptPrice || 0.000003;
+          const anchorCachedRate = anchorBaseRate * 0.15;
+          const candidateUncachedRate = candidateModelData?.promptPrice || 0.000001;
+
+          const anchorCachedCost = (contextTokens / 1_000_000) * (anchorCachedRate * 1e6);
+          const candidateUncachedCost = (contextTokens / 1_000_000) * (candidateUncachedRate * 1e6);
+
+          // Expected re-cache penalty: if session returns to anchor after TTL, paying full prompt write rate
+          const rebuildRiskProb = contextTokens >= 12_000 ? 0.35 : 0.15;
+          const anchorRebuildCost = (contextTokens / 1_000_000) * (anchorBaseRate * 1e6);
+          const expectedSwitchCost = candidateUncachedCost + (rebuildRiskProb * anchorRebuildCost);
+
+          if (expectedSwitchCost >= anchorCachedCost) {
+            session.turnCount++;
+            session.lastSeen = Date.now();
+            return {
+              model: session.anchorModel,
+              reason: `Break-even cache affinity: staying on '${session.anchorModel}' cached context ($${anchorCachedCost.toFixed(4)}) is cheaper than expected switch cost ($${expectedSwitchCost.toFixed(4)} uncached + TTL rebuild risk). Preserving warm prompt cache.`,
+              providerHint: session.providerHint
+            };
+          }
+        }
       }
     }
   }
 
-  const catalog = getAllCatalogModels();
   function finalizeDecision(res: { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' }) {
     if (sessionId) {
       const existing = sessionAffinityStore.get(sessionId);
@@ -93,6 +126,15 @@ export function selectOptimalModel(
     }
     return res;
   }
+
+  return finalizeDecision(candidate);
+}
+
+function evaluateCandidateModel(
+  jev: JevEvaluation,
+  strategy: 'cost_optimized' | 'performance_optimized' | 'balanced',
+  catalog: CatalogModel[]
+): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' } {
 
 
   // 1. Dedicated Reasoning Tier (applying TypeSafe Consistency Noul Uncertainty Band 0.30 - 0.70)
@@ -112,25 +154,25 @@ export function selectOptimalModel(
         if (strategy === 'cost_optimized') {
           reasoners.sort((a, b) => (a.promptPrice + a.completionPrice) - (b.promptPrice + b.completionPrice));
           const best = reasoners.find(m => m.id.includes('r1') || m.id.includes('deepseek')) || reasoners[0];
-          return finalizeDecision({
+          return {
             model: best.id,
             reason: `Jev detected reasoning requirement (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Selected '${best.name}' from catalog (${best.provider}) at live rate $${(best.promptPrice * 1e6).toFixed(2)}/M in.`,
             providerHint: best.provider
-          });
+          };
         } else {
           const premier = reasoners.find(m => m.id.includes('sonnet') || m.id.includes('o1') || m.id.includes('r1')) || reasoners[0];
-          return finalizeDecision({
+          return {
             model: premier.id,
             reason: `Jev detected frontier reasoning (score: ${jev.complexityScore}). Selected premier model '${premier.name}' from catalog.`,
             providerHint: premier.provider
-          });
+          };
         }
       }
     }
-    return finalizeDecision({
+    return {
       model: strategy === 'cost_optimized' ? 'deepseek/deepseek-r1' : 'anthropic/claude-3.5-sonnet',
       reason: `Jev detected frontier reasoning (score: ${jev.complexityScore}, reasoner prob: ${(jev.needsReasoner * 100).toFixed(0)}%).`
-    });
+    };
   }
 
   // 2. High-End Coding & Complex Refactoring Tier
@@ -139,17 +181,17 @@ export function selectOptimalModel(
       const coders = catalog.filter(m => m.tier === 'frontier_coding');
       if (coders.length > 0) {
         const bestCoder = coders.find(m => m.id.includes('sonnet')) || coders.find(m => m.id.includes('gpt-4o')) || coders[0];
-        return finalizeDecision({
+        return {
           model: bestCoder.id,
           reason: `Jev classified complex coding (score: ${jev.complexityScore}, intent: ${jev.intent}). Selected '${bestCoder.name}' from catalog (${bestCoder.provider}).`,
           providerHint: bestCoder.provider
-        });
+        };
       }
     }
-    return finalizeDecision({
+    return {
       model: 'anthropic/claude-3.5-sonnet',
       reason: `Jev classified complex coding (score: ${jev.complexityScore}, intent: ${jev.intent}). Routed to Claude 3.5 Sonnet.`
-    });
+    };
   }
 
   // 3. Balanced Coding / Structured Extraction / Mid-tier
@@ -158,17 +200,17 @@ export function selectOptimalModel(
       const balanced = catalog.filter(m => m.tier === 'balanced');
       if (balanced.length > 0) {
         const bestBalanced = balanced.find(m => m.id.includes('mini') || m.id.includes('flash')) || balanced[0];
-        return finalizeDecision({
+        return {
           model: bestBalanced.id,
           reason: `Jev detected standard task (intent: ${jev.intent}, score: ${jev.complexityScore}). Selected '${bestBalanced.name}' from catalog.`,
           providerHint: bestBalanced.provider
-        });
+        };
       }
     }
-    return finalizeDecision({
+    return {
       model: 'openai/gpt-4o-mini',
       reason: `Jev detected standard task (intent: ${jev.intent}, score: ${jev.complexityScore}). Routed to GPT-4o-mini.`
-    });
+    };
   }
 
   // Confidence-Gated Safety Fallback (TypeSafe 0.60 Rule):
@@ -180,17 +222,17 @@ export function selectOptimalModel(
         ? (catalog.find(m => m.tier === 'balanced') || catalog.find(m => m.tier === 'frontier_coding'))
         : (catalog.find(m => m.tier === 'frontier_coding') || catalog.find(m => m.tier === 'balanced'));
       if (safeguard) {
-        return finalizeDecision({
+        return {
           model: safeguard.id,
           reason: `Confidence-gated safeguard: Jev reported uncertainty (intent conf: ${(jev.intentConfidence * 100).toFixed(0)}%, complexity conf: ${(jev.complexityConfidence * 100).toFixed(0)}%). Elevating from lightweight tier to safeguard model '${safeguard.name}' to prevent failure.`,
           providerHint: safeguard.provider
-        });
+        };
       }
     }
-    return finalizeDecision({
+    return {
       model: strategy === 'cost_optimized' ? 'openai/gpt-4o-mini' : 'anthropic/claude-3.5-sonnet',
       reason: `Confidence-gated safeguard: Jev reported uncertainty (intent conf: ${(jev.intentConfidence * 100).toFixed(0)}%, complexity conf: ${(jev.complexityConfidence * 100).toFixed(0)}%). Elevating to safeguard model.`
-    });
+    };
   }
 
   // 4. Confident Low-complexity / Factual / Creative / Greetings
@@ -199,17 +241,17 @@ export function selectOptimalModel(
     if (cheap.length > 0) {
       cheap.sort((a, b) => (a.promptPrice + a.completionPrice) - (b.promptPrice + b.completionPrice));
       const fastest = cheap.find(m => m.id.includes('flash')) || cheap[0];
-      return finalizeDecision({
+      return {
         model: fastest.id,
         reason: `Jev detected lightweight task (score: ${jev.complexityScore}). Selected '${fastest.name}' from catalog at ultra-low rate.`,
         providerHint: fastest.provider
-      });
+      };
     }
   }
-  return finalizeDecision({
+  return {
     model: 'google/gemini-2.5-flash',
     reason: `Jev detected lightweight task (score: ${jev.complexityScore}). Routed to Gemini 2.5 Flash.`
-  });
+  };
 }
 
 
