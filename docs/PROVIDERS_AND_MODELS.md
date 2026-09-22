@@ -17,11 +17,17 @@ The router queries the live catalog from the aggregators on startup and periodic
 ### B. OpenRouter (`openrouter.ai`)
 - **Base URL**: `https://openrouter.ai/api/v1`
 - **Completions Endpoint**: `POST https://openrouter.ai/api/v1/chat/completions`
-- **Models Endpoint**: `GET https://openrouter.ai/api/v1/models` (Returns 440+ models with real-time prompt & completion prices per token)
+- **Models Endpoint**: `GET https://openrouter.ai/api/v1/models` (Returns 540+ models with real-time prompt & completion prices per token)
 - **Authentication**: `Authorization: Bearer <OPENROUTER_API_KEY>`
 - **Custom Headers**:
   - `HTTP-Referer`: Site URL
   - `X-OpenRouter-Title`: Site title ("Prompt-Router")
+
+### C. Azure AI Foundry (`services.ai.azure.com` / `openai.azure.com`)
+- **Base URL**: `https://<resource>.services.ai.azure.com/models` or `https://<resource>.openai.azure.com/openai/deployments/<deployment-id>`
+- **Completions Endpoint**: `POST https://<resource>.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview`
+- **Authentication**: `api-key: <AZURE_AI_FOUNDRY_KEY>` or `Authorization: Bearer <Entra_ID_Token>`
+- **Description**: Enterprise Microsoft cloud platform delivering managed Azure OpenAI models (GPT-4o, o3-mini) alongside Serverless Model Catalog deployments (DeepSeek R1, Llama 3.3 70B, Mistral Large, Microsoft Phi-4) with private VNet endpoints, Entra ID RBAC, and strict data residency compliance.
 
 ---
 

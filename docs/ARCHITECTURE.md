@@ -63,8 +63,8 @@ It intercepts standard OpenAI API calls (`POST /v1/chat/completions`), extracts 
 
 4. **Dynamic Model Resolution Across Unified Catalog**:
    - Jev evaluates the task requirements (intent, cognitive difficulty 1-5, and reasoning needs).
-   - The decision engine (`src/router.ts`) evaluates the synchronized catalog (440+ models from OpenRouter and Mammouth AI) to pick the best model matching those requirements.
-   - Once the model is selected, the router resolves which aggregator hosts that model (Mammouth or OpenRouter) and dispatches the call with automatic failover.
+   - The decision engine (`src/router.ts`) evaluates the synchronized catalog (540+ models across OpenRouter, Mammouth AI, and Azure AI Foundry) to pick the best model matching those requirements.
+   - Once the model is selected, the router resolves which provider hosts that model (Azure AI Foundry, Mammouth, or OpenRouter) and dispatches the call with automatic failover.
 
 5. **Streaming & Accounting Pipeline**:
    - If `stream: true`, the gateway initiates a Server-Sent Events (`text/event-stream`) connection to the client and immediately pipes upstream chunks.
