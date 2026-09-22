@@ -1308,6 +1308,76 @@ body {
   border: 1px solid rgba(206, 147, 216, 0.3);
 }
 
+/* Live Telemetry & Arbitrage Badges */
+.badge-live-stream {
+  background: rgba(13, 71, 161, 0.12);
+  color: var(--gateway-teal-dark);
+  border: 1px solid var(--gateway-teal);
+  letter-spacing: 0.5px;
+}
+
+[data-theme="dark"] .badge-live-stream {
+  background: rgba(0, 229, 255, 0.15);
+  color: #00E5FF;
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+}
+
+.badge-arbitrage-ok {
+  background: var(--savings-green-light);
+  color: var(--savings-green-dark);
+  border: 1px solid var(--savings-green);
+}
+
+[data-theme="dark"] .badge-arbitrage-ok {
+  background: rgba(198, 255, 0, 0.15);
+  color: #C6FF00;
+  border: 1px solid rgba(198, 255, 0, 0.4);
+}
+
+.badge-arbitrage-alert {
+  background: #FFF3E0;
+  color: #E65100;
+  border: 1px solid #FF9800;
+}
+
+[data-theme="dark"] .badge-arbitrage-alert {
+  background: rgba(255, 152, 0, 0.2);
+  color: #FFB74D;
+  border: 1px solid rgba(255, 152, 0, 0.5);
+}
+
+@keyframes liveRowFade {
+  0% {
+    background-color: rgba(198, 255, 0, 0.28);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.row-live-highlight {
+  animation: liveRowFade 2.5s ease-out forwards;
+}
+
+@keyframes valuePulseAnim {
+  0% {
+    transform: scale(1);
+    color: var(--gateway-teal);
+  }
+  50% {
+    transform: scale(1.04);
+    color: #C6FF00;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.val-pulse {
+  animation: valuePulseAnim 0.6s ease-out;
+}
+
 /* Modals */
 .modal-backdrop, .modal-overlay {
   position: fixed;

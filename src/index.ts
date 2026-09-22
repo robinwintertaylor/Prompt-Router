@@ -14,7 +14,9 @@ import {
   handleGetSettings,
   handleUpdateSettings,
   handleGetCatalog,
-  handleSyncCatalog
+  handleSyncCatalog,
+  handleTelemetryStream,
+  handleGetArbitrage
 } from './routes/api.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -71,6 +73,8 @@ app.get(['/v1/models/:vendor/:model', '/models/:vendor/:model'], handleGetModel)
 
 // Dashboard Optics APIs
 app.get('/api/metrics', handleGetMetrics);
+app.get('/api/telemetry/stream', handleTelemetryStream);
+app.get('/api/arbitrage', handleGetArbitrage);
 app.get('/api/logs', handleGetLogs);
 app.post('/api/test-route', handleTestRoute);
 app.get('/api/settings', handleGetSettings);

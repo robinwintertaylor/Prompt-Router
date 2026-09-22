@@ -5,47 +5,98 @@ import { selectOptimalModel, executeRoutedCompletion } from '../router.js';
 import { calculateCosts } from '../pricing.js';
 import { config } from '../config.js';
 import { getAllCatalogModels, syncCatalog } from '../catalog.js';
+import { addTelemetryClient, removeTelemetryClient } from '../telemetry.js';
+import { getArbitrageStatus } from '../arbitrage.js';
+
+export function getFormattedMetrics() {
+  const data = getMetrics();
+  const overall = data.overall || {};
+
+  const totalActual = Number(overall.total_actual_cost || 0);
+  const totalClaude = Number(overall.total_claude_cost || 0);
+  const totalGpt4o = Number(overall.total_gpt4o_cost || 0);
+  const totalSavings = Number(overall.total_savings_claude || 0);
+
+  const percentSavedClaude = totalClaude > 0
+    ? Math.max(0, Math.round(((totalClaude - totalActual) / totalClaude) * 100))
+    : 0;
+
+  const percentSavedGpt4o = totalGpt4o > 0
+    ? Math.max(0, Math.round(((totalGpt4o - totalActual) / totalGpt4o) * 100))
+    : 0;
+
+  return {
+    summary: {
+      totalRequests: Number(overall.total_requests || 0),
+      totalPromptTokens: Number(overall.total_prompt_tokens || 0),
+      totalCompletionTokens: Number(overall.total_completion_tokens || 0),
+      totalTokens: Number(overall.total_tokens || 0),
+      totalActualCost: totalActual,
+      totalClaudeCost: totalClaude,
+      totalGpt4oCost: totalGpt4o,
+      totalSavingsVsClaude: totalSavings,
+      percentSavedClaude,
+      percentSavedGpt4o,
+      avgDurationMs: Math.round(Number(overall.avg_duration_ms || 0)),
+      avgJevDurationMs: Math.round(Number(overall.avg_jev_duration_ms || 0))
+    },
+    modelBreakdown: data.modelBreakdown,
+    intentBreakdown: data.intentBreakdown,
+    clientBreakdown: data.clientBreakdown
+  };
+}
 
 export function handleGetMetrics(req: Request, res: Response) {
   try {
-    const data = getMetrics();
-    const overall = data.overall || {};
-
-    const totalActual = Number(overall.total_actual_cost || 0);
-    const totalClaude = Number(overall.total_claude_cost || 0);
-    const totalGpt4o = Number(overall.total_gpt4o_cost || 0);
-    const totalSavings = Number(overall.total_savings_claude || 0);
-
-    const percentSavedClaude = totalClaude > 0
-      ? Math.max(0, Math.round(((totalClaude - totalActual) / totalClaude) * 100))
-      : 0;
-
-    const percentSavedGpt4o = totalGpt4o > 0
-      ? Math.max(0, Math.round(((totalGpt4o - totalActual) / totalGpt4o) * 100))
-      : 0;
-
-    res.json({
-      summary: {
-        totalRequests: Number(overall.total_requests || 0),
-        totalPromptTokens: Number(overall.total_prompt_tokens || 0),
-        totalCompletionTokens: Number(overall.total_completion_tokens || 0),
-        totalTokens: Number(overall.total_tokens || 0),
-        totalActualCost: totalActual,
-        totalClaudeCost: totalClaude,
-        totalGpt4oCost: totalGpt4o,
-        totalSavingsVsClaude: totalSavings,
-        percentSavedClaude,
-        percentSavedGpt4o,
-        avgDurationMs: Math.round(Number(overall.avg_duration_ms || 0)),
-        avgJevDurationMs: Math.round(Number(overall.avg_jev_duration_ms || 0))
-      },
-      modelBreakdown: data.modelBreakdown,
-      intentBreakdown: data.intentBreakdown,
-      clientBreakdown: data.clientBreakdown
-    });
+    res.json(getFormattedMetrics());
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+}
+
+export function handleTelemetryStream(req: Request, res: Response) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const clientId = 'client-' + Math.random().toString(36).slice(2, 9);
+  addTelemetryClient(clientId, res);
+
+  // Initial state push
+  try {
+    const initialPayload = {
+      metrics: getFormattedMetrics(),
+      arbitrage: getArbitrageStatus()
+    };
+    res.write(`event: initial_state\ndata: ${JSON.stringify(initialPayload)}\n\n`);
+  } catch (err) {
+    console.warn('[Telemetry] Error sending initial state to client:', err);
+  }
+
+  // Heartbeat ping every 15s to keep connection alive through reverse proxies
+  const pingInterval = setInterval(() => {
+    try {
+      if (res.writable && !res.writableEnded) {
+        res.write(': ping\n\n');
+      } else {
+        clearInterval(pingInterval);
+        removeTelemetryClient(clientId);
+      }
+    } catch {
+      clearInterval(pingInterval);
+      removeTelemetryClient(clientId);
+    }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(pingInterval);
+    removeTelemetryClient(clientId);
+  });
+}
+
+export function handleGetArbitrage(req: Request, res: Response) {
+  res.json(getArbitrageStatus());
 }
 
 export function handleGetLogs(req: Request, res: Response) {

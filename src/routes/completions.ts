@@ -4,6 +4,23 @@ import { evaluateWithJev, extractStateFromMessages } from '../jev.js';
 import { executeRoutedCompletion } from '../router.js';
 import { calculateCosts } from '../pricing.js';
 import { logRequest } from '../db.js';
+import { broadcastTelemetry } from '../telemetry.js';
+import { getFormattedMetrics } from './api.js';
+
+function recordAndBroadcastRequest(entry: any) {
+  logRequest(entry);
+  try {
+    broadcastTelemetry('request_completed', {
+      log: {
+        ...entry,
+        timestamp: new Date().toISOString()
+      },
+      metrics: getFormattedMetrics()
+    });
+  } catch (err) {
+    console.warn('[Telemetry] Non-blocking warning: failed to broadcast telemetry update:', err);
+  }
+}
 
 export function detectClientAgent(req: Request): string {
   const ua = String(req.headers['user-agent'] || '').toLowerCase();
@@ -144,7 +161,7 @@ export async function handleChatCompletions(req: Request, res: Response) {
     const durationMs = Date.now() - startTime;
     const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens);
 
-    logRequest({
+    recordAndBroadcastRequest({
       id: requestId,
       client_agent: clientAgent,
       model_requested: requestedModel,
@@ -177,7 +194,7 @@ export async function handleChatCompletions(req: Request, res: Response) {
   const durationMs = Date.now() - startTime;
   const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens);
 
-  logRequest({
+  recordAndBroadcastRequest({
     id: requestId,
     client_agent: clientAgent,
     model_requested: requestedModel,
@@ -228,7 +245,7 @@ function handleUnconfiguredMockStream(
   const durationMs = Date.now() - startTime;
   const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens);
 
-  logRequest({
+  recordAndBroadcastRequest({
     id: requestId,
     client_agent: clientAgent,
     model_requested: requestedModel,
