@@ -23,7 +23,7 @@
 
 **Prompt-Router** is an ultra-fast, zero-hallucination intelligent LLM gateway and telemetry dashboard designed for high-velocity coding agents (Goose, Cursor, Claude Code, VS Code) and enterprise pipelines.
 
-Instead of burning engineering budget sending every trivial lookup or formatting task to expensive frontier models ($15–$30/M tokens), Prompt-Router deploys **TypeSafe Jev System One**—a non-autoregressive, sub-120ms classification engine—to analyze intent, task complexity, and reasoning requirements. It then dispatches each prompt to the exact model best suited for the job across **Mammouth AI** and **OpenRouter**.
+Instead of burning engineering budget sending every trivial lookup or formatting task to expensive frontier models ($15–$30/M tokens), Prompt-Router deploys **TypeSafe Jev System One**—a non-autoregressive, sub-120ms classification engine—to analyze intent, task complexity, and reasoning requirements. It then dispatches each prompt to the exact model best suited for the job across **Azure AI Foundry**, **Mammouth AI**, and **OpenRouter**.
 
 ---
 
@@ -37,13 +37,22 @@ Modern frontier models offer **75%–90% prompt caching discounts** (Anthropic c
 ### 🛡️ 2. The 0.60 Confidence-Gated Safety Rule
 Zero-hallucination routing demands deterministic fail-safes. When Jev's calibrated uncertainty band drops below **0.60 confidence**, Prompt-Router refuses to downgrade to flash models. Instead, it automatically elevates the query to robust fail-safe tiers (`claude-3.5-sonnet`, `gpt-4o-mini`, or `claude-opus-4.8`) to guarantee agent reliability.
 
-### 🎛️ 3. Concept 1: The Parallel Junction Dashboard
+### ☁️ 3. Azure AI Foundry Enterprise Integration
+In addition to public model aggregators, Prompt-Router natively bridges into **Microsoft Azure AI Foundry** and Azure OpenAI Service deployments:
+* **Enterprise Identity & Security**: Native support for Microsoft Entra ID (Bearer tokens), Managed Identities, and Azure API keys.
+* **Model Catalog & Serverless Endpoints**: Dynamically maps generic model requests to Azure-hosted frontier models (GPT-4o, Claude) and Serverless Model Catalog deployments (DeepSeek R1, Llama 3.3 70B, Mistral Large, Microsoft Phi-4).
+* **VNet & Sovereign Compliance**: Honors private networking (Azure Private Link / VNet isolation) and strict geographic data residency (EU Data Boundary / US sovereign clouds) for corporate enterprise workloads.
+
+### 🧩 4. Structured JSON Semantic State
+Rather than passing raw, concatenated string prompts to Jev, Prompt-Router constructs typed, structured JSON payloads (`{ instructions, conversation, active_prompt }`). This ensures TypeSafe Jev extracts intent, role constraints, and reasoning triggers cleanly without semantic confusion or token bleed across multi-turn agent threads.
+
+### 🎛️ 5. Concept 1: The Parallel Junction Dashboard
 An optics control room styled with **Gateway Teal**, **Jev Yellow-Green**, IBM Plex typography, and dark schematic grids. Real-time telemetry tracks:
 * Live prompt/completion token ingestion counters.
 * Realized dollar expenditure vs hypothetical 100% Claude 3.5 Sonnet / GPT-4o baselines.
 * Synchronized dual-toggle light/dark theme persistence via `localStorage`.
 
-### 🪿 4. Native Goose AI Agent Integration
+### 🪿 6. Native Goose AI Agent Integration
 Pre-configured with zero friction as a custom provider (`custom_prompt_router.json`) for the **Goose AI Agent**. Goose automatically detects Prompt-Router's live server and routes through Jev with millisecond response times.
 
 ---
@@ -53,9 +62,10 @@ Pre-configured with zero friction as a custom provider (`custom_prompt_router.js
 - **Jev-Powered Fast Classification**: Uses TypeSafe's non-autoregressive **Jev** System One model (`jev-latest`) to evaluate cognitive complexity, intent, and reasoning needs in parallel in **under 150ms** for only **$0.042 per million input tokens** (free output).
 - **Zero Hallucination Routing**: Jev never generates unstructured text; it operates on deterministic primitives (`choice`, `score`, `noul`) with calibrated probability distributions.
 - **Drop-in OpenAI Compatibility**: Connects seamlessly with any standard OpenAI-compatible client, SDK, or developer IDE (Cursor, VS Code, Goose, Claude Code, Anti-Gravity).
-- **Dual Downstream Providers**:
-  - **Mammouth AI** (`api.mammouth.ai`): French subscription/flat-rate aggregator providing Claude 3.5 Sonnet, GPT-4o, Gemini 2.5, DeepSeek, and Mistral.
-  - **OpenRouter** (`openrouter.ai`): Multi-catalog developer API with automatic fallback.
+- **Tri-Provider Routing Engine (Aggregators + Enterprise Cloud)**:
+  - **Azure AI Foundry** (`services.ai.azure.com` / `openai.azure.com`): Microsoft enterprise platform with Entra ID authentication, Private Link VNet security, and serverless model catalog deployments (DeepSeek R1, Llama 3.3, Phi-4, GPT-4o).
+  - **Mammouth AI** (`api.mammouth.ai`): French subscription/flat-rate aggregator providing Claude 3.5 Sonnet, GPT-4o, Gemini 2.5, DeepSeek, and Mistral with European data residency.
+  - **OpenRouter** (`openrouter.ai`): Multi-catalog developer API routing across 540+ models with live dynamic pricing and automated failover.
 - **Optics & Cost Comparison Dashboard (Concept 1: The Parallel Junction)**:
   - Live token metrics (prompt tokens in, completion tokens out).
   - Actual expenditure vs. hypothetical costs if **100% of queries went to Claude 3.5 Sonnet** or **100% to OpenAI GPT-4o**.
@@ -126,10 +136,15 @@ Copy `.env.example` to `.env` or configure keys directly in the web dashboard:
 ```env
 PORT=4000
 HOST=0.0.0.0
-TYPESAFE_API_KEY=your_typesafe_key      # https://typesafe.ai
-MAMMOUTH_API_KEY=your_mammouth_key      # https://mammouth.ai
-OPENROUTER_API_KEY=your_openrouter_key  # https://openrouter.ai
-ROUTING_STRATEGY=cost_optimized
+TYPESAFE_API_KEY=your_typesafe_key          # https://typesafe.ai (120ms Jev System One)
+MAMMOUTH_API_KEY=your_mammouth_key          # https://mammouth.ai (EU Aggregator)
+OPENROUTER_API_KEY=your_openrouter_key      # https://openrouter.ai (540+ Model Catalog)
+
+# Azure AI Foundry / Azure OpenAI (Enterprise Cloud Provider)
+AZURE_AI_FOUNDRY_ENDPOINT=https://<resource>.services.ai.azure.com/models
+AZURE_AI_FOUNDRY_KEY=your_azure_key         # Azure API Key or Entra ID Bearer Token
+
+ROUTING_STRATEGY=cost_optimized             # cost_optimized | performance_optimized | balanced
 DEFAULT_PROVIDER=mammouth
 ```
 
