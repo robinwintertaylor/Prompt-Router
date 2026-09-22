@@ -1,7 +1,7 @@
-import { initDatabase, getMetrics, getRecentLogs, logRequest } from '../src/db.js';
+import { initDatabase, getMetrics, getRecentLogs, logRequest, setSetting } from '../src/db.js';
 import { calculateCosts } from '../src/pricing.js';
 import { evaluateWithJev } from '../src/jev.js';
-import { selectOptimalModel } from '../src/router.js';
+import { selectOptimalModel, getDirectVendorIfConfigured } from '../src/router.js';
 import { syncCatalog, getAllCatalogModels, getCatalogModel } from '../src/catalog.js';
 import { recordProviderPerformance, getArbitrageStatus, resetProviderMetrics } from '../src/arbitrage.js';
 import { addTelemetryClient, removeTelemetryClient, broadcastTelemetry } from '../src/telemetry.js';
@@ -175,6 +175,31 @@ async function runTests() {
     throw new Error('Telemetry broadcast did not deliver payload to registered client');
   }
   console.log('✅ Live SSE Telemetry Stream verified.\n');
+
+  // Test 3F: Testing Credential-Aware Direct Vendor Dispatch (Mistral, Anthropic, OpenAI)
+  console.log('Test 3F: Testing Credential-Aware Direct Dispatch...');
+  setSetting('MISTRAL_API_KEY', '');
+  setSetting('ANTHROPIC_API_KEY', '');
+  if (getDirectVendorIfConfigured('mistralai/mistral-large') !== null) {
+    throw new Error('Expected null vendor when MISTRAL_API_KEY is unset');
+  }
+
+  setSetting('MISTRAL_API_KEY', 'test-mistral-key');
+  const mistralVendor = getDirectVendorIfConfigured('mistralai/mistral-large');
+  console.log(`• Direct Vendor for Mistral Large: ${mistralVendor}`);
+  if (mistralVendor !== 'mistral') {
+    throw new Error(`Expected 'mistral', got '${mistralVendor}'`);
+  }
+
+  setSetting('ANTHROPIC_API_KEY', 'test-anthropic-key');
+  const anthropicVendor = getDirectVendorIfConfigured('anthropic/claude-fable-5.1');
+  console.log(`• Direct Vendor for Claude Fable: ${anthropicVendor}`);
+  if (anthropicVendor !== 'anthropic') {
+    throw new Error(`Expected 'anthropic', got '${anthropicVendor}'`);
+  }
+  setSetting('MISTRAL_API_KEY', '');
+  setSetting('ANTHROPIC_API_KEY', '');
+  console.log('✅ Credential-Aware Direct Dispatch verified.\n');
 
 
   // Test 4: Database logging & metrics aggregation

@@ -616,6 +616,11 @@ async function fetchSettings() {
     if (data.typesafeKeyMasked) document.getElementById('input-typesafe-key').placeholder = data.typesafeKeyMasked;
     if (data.mammouthKeyMasked) document.getElementById('input-mammouth-key').placeholder = data.mammouthKeyMasked;
     if (data.openrouterKeyMasked) document.getElementById('input-openrouter-key').placeholder = data.openrouterKeyMasked;
+    if (data.anthropicKeyMasked) document.getElementById('input-anthropic-key').placeholder = data.anthropicKeyMasked;
+    if (data.openaiKeyMasked) document.getElementById('input-openai-key').placeholder = data.openaiKeyMasked;
+    if (data.mistralKeyMasked) document.getElementById('input-mistral-key').placeholder = data.mistralKeyMasked;
+    if (data.deepseekKeyMasked) document.getElementById('input-deepseek-key').placeholder = data.deepseekKeyMasked;
+    if (data.geminiKeyMasked) document.getElementById('input-gemini-key').placeholder = data.geminiKeyMasked;
     if (data.routingStrategy) document.getElementById('select-strategy').value = data.routingStrategy;
     if (data.defaultProvider) document.getElementById('select-provider').value = data.defaultProvider;
   } catch (err) {
@@ -635,6 +640,11 @@ async function saveSettings() {
   const typesafeApiKey = document.getElementById('input-typesafe-key').value;
   const mammouthApiKey = document.getElementById('input-mammouth-key').value;
   const openrouterApiKey = document.getElementById('input-openrouter-key').value;
+  const anthropicApiKey = document.getElementById('input-anthropic-key').value;
+  const openaiApiKey = document.getElementById('input-openai-key').value;
+  const mistralApiKey = document.getElementById('input-mistral-key').value;
+  const deepseekApiKey = document.getElementById('input-deepseek-key').value;
+  const geminiApiKey = document.getElementById('input-gemini-key').value;
   const routingStrategy = document.getElementById('select-strategy').value;
   const defaultProvider = document.getElementById('select-provider').value;
 
@@ -642,6 +652,11 @@ async function saveSettings() {
   if (typesafeApiKey) payload.typesafeApiKey = typesafeApiKey;
   if (mammouthApiKey) payload.mammouthApiKey = mammouthApiKey;
   if (openrouterApiKey) payload.openrouterApiKey = openrouterApiKey;
+  if (anthropicApiKey) payload.anthropicApiKey = anthropicApiKey;
+  if (openaiApiKey) payload.openaiApiKey = openaiApiKey;
+  if (mistralApiKey) payload.mistralApiKey = mistralApiKey;
+  if (deepseekApiKey) payload.deepseekApiKey = deepseekApiKey;
+  if (geminiApiKey) payload.geminiApiKey = geminiApiKey;
 
   try {
     const res = await fetch('/api/settings', {

@@ -161,14 +161,29 @@ export function handleGetSettings(req: Request, res: Response) {
   const typesafeKey = getSetting('TYPESAFE_API_KEY', config.typesafeApiKey);
   const mammouthKey = getSetting('MAMMOUTH_API_KEY', config.mammouthApiKey);
   const openrouterKey = getSetting('OPENROUTER_API_KEY', config.openrouterApiKey);
+  const anthropicKey = getSetting('ANTHROPIC_API_KEY', config.anthropicApiKey);
+  const openaiKey = getSetting('OPENAI_API_KEY', config.openaiApiKey);
+  const mistralKey = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
+  const deepseekKey = getSetting('DEEPSEEK_API_KEY', config.deepseekApiKey);
+  const geminiKey = getSetting('GEMINI_API_KEY', config.geminiApiKey);
 
   res.json({
     hasTypesafeKey: !!(typesafeKey && typesafeKey.trim()),
     hasMammouthKey: !!(mammouthKey && mammouthKey.trim()),
     hasOpenrouterKey: !!(openrouterKey && openrouterKey.trim()),
+    hasAnthropicKey: !!(anthropicKey && anthropicKey.trim()),
+    hasOpenaiKey: !!(openaiKey && openaiKey.trim()),
+    hasMistralKey: !!(mistralKey && mistralKey.trim()),
+    hasDeepseekKey: !!(deepseekKey && deepseekKey.trim()),
+    hasGeminiKey: !!(geminiKey && geminiKey.trim()),
     typesafeKeyMasked: typesafeKey ? typesafeKey.slice(0, 4) + '...' + typesafeKey.slice(-4) : '',
     mammouthKeyMasked: mammouthKey ? mammouthKey.slice(0, 4) + '...' + mammouthKey.slice(-4) : '',
     openrouterKeyMasked: openrouterKey ? openrouterKey.slice(0, 4) + '...' + openrouterKey.slice(-4) : '',
+    anthropicKeyMasked: anthropicKey ? anthropicKey.slice(0, 4) + '...' + anthropicKey.slice(-4) : '',
+    openaiKeyMasked: openaiKey ? openaiKey.slice(0, 4) + '...' + openaiKey.slice(-4) : '',
+    mistralKeyMasked: mistralKey ? mistralKey.slice(0, 4) + '...' + mistralKey.slice(-4) : '',
+    deepseekKeyMasked: deepseekKey ? deepseekKey.slice(0, 4) + '...' + deepseekKey.slice(-4) : '',
+    geminiKeyMasked: geminiKey ? geminiKey.slice(0, 4) + '...' + geminiKey.slice(-4) : '',
     routingStrategy: getSetting('ROUTING_STRATEGY', config.routingStrategy),
     defaultProvider: getSetting('DEFAULT_PROVIDER', config.defaultProvider),
     port: config.port
@@ -176,7 +191,18 @@ export function handleGetSettings(req: Request, res: Response) {
 }
 
 export function handleUpdateSettings(req: Request, res: Response) {
-  const { typesafeApiKey, mammouthApiKey, openrouterApiKey, routingStrategy, defaultProvider } = req.body;
+  const {
+    typesafeApiKey,
+    mammouthApiKey,
+    openrouterApiKey,
+    anthropicApiKey,
+    openaiApiKey,
+    mistralApiKey,
+    deepseekApiKey,
+    geminiApiKey,
+    routingStrategy,
+    defaultProvider
+  } = req.body;
 
   if (typesafeApiKey !== undefined && typesafeApiKey !== null) {
     setSetting('TYPESAFE_API_KEY', typesafeApiKey.trim());
@@ -186,6 +212,21 @@ export function handleUpdateSettings(req: Request, res: Response) {
   }
   if (openrouterApiKey !== undefined && openrouterApiKey !== null) {
     setSetting('OPENROUTER_API_KEY', openrouterApiKey.trim());
+  }
+  if (anthropicApiKey !== undefined && anthropicApiKey !== null) {
+    setSetting('ANTHROPIC_API_KEY', anthropicApiKey.trim());
+  }
+  if (openaiApiKey !== undefined && openaiApiKey !== null) {
+    setSetting('OPENAI_API_KEY', openaiApiKey.trim());
+  }
+  if (mistralApiKey !== undefined && mistralApiKey !== null) {
+    setSetting('MISTRAL_API_KEY', mistralApiKey.trim());
+  }
+  if (deepseekApiKey !== undefined && deepseekApiKey !== null) {
+    setSetting('DEEPSEEK_API_KEY', deepseekApiKey.trim());
+  }
+  if (geminiApiKey !== undefined && geminiApiKey !== null) {
+    setSetting('GEMINI_API_KEY', geminiApiKey.trim());
   }
   if (routingStrategy) {
     setSetting('ROUTING_STRATEGY', routingStrategy);
