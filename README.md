@@ -29,7 +29,7 @@ Instead of burning engineering budget sending every trivial lookup or formatting
 
 ## 🧠 Heavy Engineering Under the Hood
 
-### 🌀 1. The Cache Thrashing Paradox (Solved!)
+### 🌀 1. The Cache Thrashing Paradox
 Modern frontier models offer **75%–90% prompt caching discounts** (Anthropic charges $0.30/M for cached tokens vs $3.00/M uncached; DeepSeek charges $0.07/M cached vs $0.55/M).
 * **The Problem**: Naive multi-turn LLM routers evaluate every turn in isolation. Switching models mid-turn invalidates the upstream provider's KV cache, forcing full token ingestion fees on every single step—costing up to 10× *more* than staying on a frontier model!
 * **The Fix**: Prompt-Router features **Session Fingerprinting & KV Cache Affinity**. Once conversation history exceeds $\ge 12\text{k}$ tokens, queries anchor to the incumbent model to protect prompt cache discounts, switching only when Jev detects extreme formal reasoning needs ($\ge 0.70$).
