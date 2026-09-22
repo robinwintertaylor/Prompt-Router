@@ -13,9 +13,9 @@ export interface JevEvaluation {
   jevInputTokens: number;
 }
 
-export function extractStateFromMessages(messages: any[]): { stateText: string; promptPreview: string } {
+export function extractStateFromMessages(messages: any[]): { stateText: string; stateObj: any; promptPreview: string } {
   if (!Array.isArray(messages) || messages.length === 0) {
-    return { stateText: '', promptPreview: 'Empty message' };
+    return { stateText: '', stateObj: { conversation: [] }, promptPreview: 'Empty message' };
   }
 
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
@@ -33,8 +33,10 @@ export function extractStateFromMessages(messages: any[]): { stateText: string; 
     }
   }
 
+  const systemMsg = messages.find(m => m.role === 'system');
   const recentMessages = messages.slice(-5);
   const formattedLines: string[] = [];
+  const structuredTurns: { role: string; content: string }[] = [];
 
   for (const msg of recentMessages) {
     let content = '';
@@ -45,17 +47,26 @@ export function extractStateFromMessages(messages: any[]): { stateText: string; 
         .map((p: any) => (p.type === 'text' ? p.text : '[Attachment: ' + (p.type || 'media') + ']'))
         .join(' ');
     }
-    formattedLines.push(`[${msg.role?.toUpperCase() || 'USER'}]: ${content}`);
+    const role = (msg.role || 'user').toUpperCase();
+    formattedLines.push(`[${role}]: ${content}`);
+    structuredTurns.push({ role: role.toLowerCase(), content });
   }
 
   const fullState = formattedLines.join('\n\n');
   const stateText = fullState.length > 32000 ? fullState.slice(-32000) : fullState;
 
-  return { stateText, promptPreview: promptPreview || 'User prompt' };
+  // Jev accepts structured JSON objects for enhanced semantic parsing
+  const stateObj = {
+    instructions: typeof systemMsg?.content === 'string' ? systemMsg.content.slice(0, 4000) : undefined,
+    conversation: structuredTurns,
+    active_prompt: promptPreview
+  };
+
+  return { stateText, stateObj, promptPreview: promptPreview || 'User prompt' };
 }
 
 export async function evaluateWithJev(messages: any[]): Promise<JevEvaluation> {
-  const { stateText } = extractStateFromMessages(messages);
+  const { stateText, stateObj } = extractStateFromMessages(messages);
   const apiKey = getSetting('TYPESAFE_API_KEY', config.typesafeApiKey);
 
   const startTime = Date.now();
@@ -72,7 +83,7 @@ export async function evaluateWithJev(messages: any[]): Promise<JevEvaluation> {
     });
 
     const response = await client.systemOne({
-      state: stateText,
+      state: stateObj,
       questions: {
         intent: choice('Classify the primary task type of the user request', {
           coding_complex: 'Multi-file architecture, tricky debugging, deep algorithm design, refactoring large codebase',

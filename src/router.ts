@@ -98,7 +98,11 @@ export function selectOptimalModel(
   const isDefiniteReasoner = jev.needsReasoner >= 0.70;
   const isBorderlineReasoner = jev.needsReasoner >= 0.30 && jev.needsReasoner < 0.70;
   const isReasoningIntent = jev.intent === 'deep_reasoning';
-  const requiresReasoningModel = isDefiniteReasoner || (isBorderlineReasoner && isReasoningIntent) || (jev.complexityScore >= 4.6 && isReasoningIntent);
+  const isHighComplexityAlgorithm = jev.complexityScore >= 3.8 && (jev.intent === 'coding_complex' || isReasoningIntent);
+  const requiresReasoningModel =
+    isDefiniteReasoner ||
+    (isBorderlineReasoner && (isReasoningIntent || isHighComplexityAlgorithm)) ||
+    (jev.complexityScore >= 4.6 && isReasoningIntent);
 
   if (requiresReasoningModel) {
     if (catalog.length > 0) {
@@ -166,7 +170,29 @@ export function selectOptimalModel(
     });
   }
 
-  // 4. Low-complexity / Factual / Creative / Greetings
+  // Confidence-Gated Safety Fallback (TypeSafe 0.60 Rule):
+  // When Jev is uncertain on either intent or complexity, avoid downgrading to ultra-cheap flash tier.
+  const isUncertain = jev.intentConfidence < 0.60 || jev.complexityConfidence < 0.60;
+  if (isUncertain) {
+    if (catalog.length > 0) {
+      const safeguard = strategy === 'cost_optimized'
+        ? (catalog.find(m => m.tier === 'balanced') || catalog.find(m => m.tier === 'frontier_coding'))
+        : (catalog.find(m => m.tier === 'frontier_coding') || catalog.find(m => m.tier === 'balanced'));
+      if (safeguard) {
+        return finalizeDecision({
+          model: safeguard.id,
+          reason: `Confidence-gated safeguard: Jev reported uncertainty (intent conf: ${(jev.intentConfidence * 100).toFixed(0)}%, complexity conf: ${(jev.complexityConfidence * 100).toFixed(0)}%). Elevating from lightweight tier to safeguard model '${safeguard.name}' to prevent failure.`,
+          providerHint: safeguard.provider
+        });
+      }
+    }
+    return finalizeDecision({
+      model: strategy === 'cost_optimized' ? 'openai/gpt-4o-mini' : 'anthropic/claude-3.5-sonnet',
+      reason: `Confidence-gated safeguard: Jev reported uncertainty (intent conf: ${(jev.intentConfidence * 100).toFixed(0)}%, complexity conf: ${(jev.complexityConfidence * 100).toFixed(0)}%). Elevating to safeguard model.`
+    });
+  }
+
+  // 4. Confident Low-complexity / Factual / Creative / Greetings
   if (catalog.length > 0) {
     const cheap = catalog.filter(m => m.tier === 'fast_cheap');
     if (cheap.length > 0) {
