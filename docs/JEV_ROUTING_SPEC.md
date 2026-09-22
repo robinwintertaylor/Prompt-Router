@@ -97,6 +97,16 @@ The router maps Jev's parallel outputs to downstream models using these rules:
 | **Intent $\in$ [`coding_simple`, `structured_extraction`] OR Complexity $\ge 2.6$** | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` |
 | **Complexity $< 2.6$ (Greetings, Lookups, Casual Chat)** | `google/gemini-2.5-flash` | `google/gemini-2.5-flash` |
 
+### Confidence-Gated Safety Fallback (The 0.60 Rule)
+TypeSafe Jev Choice and Score questions report a calibrated `confidence` metric ($0.0$ to $1.0$).
+* When Jev reports uncertainty ($\text{intentConfidence} < 0.60$ or $\text{complexityConfidence} < 0.60$), the router activates a **Confidence-Gated Safety Fallback**, elevating the request to a reliable safeguard model (`gpt-4o-mini` or `claude-3.5-sonnet`) rather than downgrading to an ultra-cheap flash model.
+* This eliminates failure risks on novel, ambiguous, or polyglot developer prompts while preserving high-speed savings when Jev is confident.
+
+### Noul Uncertainty Band Complexity Tie-Breakers
+For questions in the $0.30 - 0.70$ uncertainty band on `needs_reasoner`, the router applies a multi-factor determination:
+$$\text{Reasoning Trigger} = (\text{needs\_reasoner} \ge 0.70) \lor (\text{needs\_reasoner} \ge 0.30 \land (\text{intent} = \text{deep\_reasoning} \lor (\text{intent} = \text{coding\_complex} \land \text{complexity} \ge 3.8)))$$
+This guarantees that mathematically demanding or deep algorithmic tasks receive a reasoning model (e.g. DeepSeek R1).
+
 ---
 
 ## 4. Heuristic Fallback Engine

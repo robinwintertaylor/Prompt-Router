@@ -100,6 +100,25 @@ async function runTests() {
     throw new Error(`Expected reasoner model for extreme reasoning, but got ${turn3Route.model}`);
   }
   console.log('✅ Multi-Turn Continuity & Cache Affinity verified.\n');
+  // Test 3C: Verifying Confidence-Gated Safety Fallback (The 0.60 Rule)
+  console.log('Test 3C: Testing Confidence-Gated Safety Fallback (0.60 Rule)...');
+  const uncertainEval = {
+    intent: 'factual_lookup' as const,
+    intentConfidence: 0.42, // Below 0.60 threshold
+    complexityScore: 1.2,
+    complexityConfidence: 0.50, // Below 0.60 threshold
+    needsReasoner: 0.05,
+    jevDurationMs: 110,
+    isFallback: false,
+    jevInputTokens: 350
+  };
+  const safeRoute = selectOptimalModel('auto', uncertainEval, 'cost_optimized');
+  console.log(`• Low Confidence routing elevated to: ${safeRoute.model} (${safeRoute.reason})`);
+  if (safeRoute.model.includes('flash') || safeRoute.model.includes('ling-3.0-flash')) {
+    throw new Error(`Expected uncertain eval to be elevated to safeguard model, but got ${safeRoute.model}`);
+  }
+  console.log('✅ Confidence-Gated Safety Fallback verified.\n');
+
 
   // Test 4: Database logging & metrics aggregation
   console.log('Test 4: Testing DB Logging and Metrics Retrieval...');
