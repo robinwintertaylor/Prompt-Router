@@ -36,8 +36,8 @@ async function runTests() {
   // Flash model
   const flashCosts = calculateCosts('google/gemini-2.5-flash', promptTokens, completionTokens, 1000);
   console.log(`• Gemini Flash cost: $${flashCosts.totalActualCost.toFixed(6)}`);
-  console.log(`• Claude 3.5 Would Cost: $${flashCosts.costIfClaude.toFixed(6)}`);
-  console.log(`• Savings vs Claude: $${flashCosts.savingsVsClaude.toFixed(6)} (${Math.round((flashCosts.savingsVsClaude / flashCosts.costIfClaude) * 100)}% savings)`);
+  console.log(`• Frontier Claude Fable Would Cost: $${flashCosts.costIfClaude.toFixed(6)}`);
+  console.log(`• Savings vs Frontier: $${flashCosts.savingsVsClaude.toFixed(6)} (${Math.round((flashCosts.savingsVsClaude / flashCosts.costIfClaude) * 100)}% savings)`);
   if (flashCosts.savingsVsClaude <= 0) throw new Error('Savings calculation failed');
   console.log('✅ Pricing & savings calculation verified.\n');
 
@@ -221,9 +221,9 @@ async function runTests() {
     jev_duration_ms: evalGreeting.jevDurationMs,
     cost_jev: 0.000002,
     cost_actual: 0.000017,
-    cost_if_claude: 0.000600,
-    cost_if_gpt4o: 0.000425,
-    savings_vs_claude: 0.000583,
+    cost_if_claude: 0.002000,
+    cost_if_gpt4o: 0.002000,
+    savings_vs_claude: 0.001983,
     prompt_preview: 'Hello there, how are you?'
   });
 
@@ -244,9 +244,9 @@ async function runTests() {
     jev_duration_ms: evalComplex.jevDurationMs,
     cost_jev: 0.000034,
     cost_actual: 0.011400,
-    cost_if_claude: 0.011400,
-    cost_if_gpt4o: 0.008000,
-    savings_vs_claude: 0.000000,
+    cost_if_claude: 0.038000,
+    cost_if_gpt4o: 0.038000,
+    savings_vs_claude: 0.026600,
     prompt_preview: 'Architect an enterprise microservices solution with Kafka...'
   });
 
