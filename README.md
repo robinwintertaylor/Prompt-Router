@@ -156,7 +156,28 @@ npm run build
 npm start   # Starts on http://localhost:4000
 ```
 
-### 2. Connect Your Coding Agent
+### 2. Configure Credentials (via Dashboard or .env)
+Configure keys either in `.env` or in the dashboard **Settings Modal** (`http://localhost:4000`):
+
+```env
+# 1. Non-Autoregressive Decision Engine
+TYPESAFE_API_KEY=ts_live_...       # https://typesafe.ai (120ms Jev System One)
+
+# 2. Direct Vendor Accounts (Optional - uses your existing subscriptions)
+MISTRAL_API_KEY=...                # https://console.mistral.ai (EU data residency)
+ANTHROPIC_API_KEY=...              # https://console.anthropic.com
+OPENAI_API_KEY=...                 # https://platform.openai.com
+DEEPSEEK_API_KEY=...               # https://platform.deepseek.com
+GEMINI_API_KEY=...                 # https://aistudio.google.com
+
+# 3. Fallback Aggregators & Enterprise Cloud
+OPENROUTER_API_KEY=sk-or-v1-...    # https://openrouter.ai (540+ models)
+MAMMOUTH_API_KEY=sk-mammouth-...   # https://mammouth.ai (France)
+AZURE_AI_FOUNDRY_ENDPOINT=...      # https://<resource>.services.ai.azure.com/models
+AZURE_AI_FOUNDRY_KEY=...           # Entra ID Bearer token or Azure API key
+```
+
+### 3. Connect Your Coding Agent
 * **Goose AI Agent**: Already pre-configured on install. Run:
   ```bash
   goose session --provider custom_prompt_router --model auto
