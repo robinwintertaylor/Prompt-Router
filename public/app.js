@@ -70,6 +70,22 @@ function initApp() {
     document.getElementById('simulator-section')?.scrollIntoView({ behavior: 'smooth' });
   });
 
+  // Backdrop click to close modals
+  document.getElementById('settings-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'settings-modal') closeSettingsModal();
+  });
+  document.getElementById('catalog-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'catalog-modal') closeCatalogModal();
+  });
+
+  // Escape key to close any active modal
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeSettingsModal();
+      closeCatalogModal();
+    }
+  });
+
   // Strategy quick selector in toolbar
   document.getElementById('select-strategy-quick')?.addEventListener('change', async (e) => {
     const strategy = e.target.value;
@@ -630,10 +646,12 @@ async function fetchSettings() {
 
 function openSettingsModal() {
   document.getElementById('settings-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
 }
 
 function closeSettingsModal() {
   document.getElementById('settings-modal').classList.add('hidden');
+  document.body.style.overflow = '';
 }
 
 async function saveSettings() {
@@ -762,11 +780,13 @@ function getTierBadge(tier) {
 
 function openCatalogModal() {
   document.getElementById('catalog-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
   fetchCatalog();
 }
 
 function closeCatalogModal() {
   document.getElementById('catalog-modal').classList.add('hidden');
+  document.body.style.overflow = '';
 }
 
 async function triggerCatalogSync() {
