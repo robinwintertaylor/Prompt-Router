@@ -318,7 +318,7 @@ These metrics are saved automatically to `prompt_router.db` and rendered on the 
 
 ## 🔄 Multi-Turn Continuity & KV Cache Affinity
 
-In long agentic coding sessions (such as within Cursor, Claude Code, or Goose), conversations accumulate tens of thousands of tokens of history (file reads, tool calls, terminal outputs, and code diffs).
+In long agentic coding sessions (such as within Goose, Cursor, or VS Code), conversations accumulate tens of thousands of tokens of history (file reads, tool calls, terminal outputs, and code diffs).
 
 ### The Cache Thrashing Paradox
 Modern frontier models offer **KV Prompt Caching discounts of 75%–90%** (e.g. Anthropic charges $0.30/M for cached prompt inputs vs $3.00/M uncached; DeepSeek charges $0.07/M cached vs $0.55/M).
@@ -345,4 +345,12 @@ Run the automated test suite:
 npm run test
 ```
 All tests verify database initialization, Jev decision flow, model selection, and SQLite metrics aggregation.
+
+---
+
+## 📄 License
+
+Prompt-Router is open-source software licensed under the **[MIT License](LICENSE)**.
+
+You are free to use, modify, distribute, and integrate Prompt-Router into commercial products, internal enterprise infrastructure, and custom developer toolchains without restriction.
 
