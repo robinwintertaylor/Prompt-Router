@@ -386,7 +386,7 @@ function renderMetrics(data) {
 
   const savingsPctEl = document.getElementById('val-savings-percent');
   if (savingsPctEl) {
-    savingsPctEl.textContent = `${s.percentSavedClaude}% saved vs Claude (${s.percentSavedGpt4o}% vs GPT-4o)`;
+    savingsPctEl.textContent = `${s.percentSavedClaude}% saved vs Frontier Fable (${s.percentSavedGpt4o}% vs Astra)`;
   }
 
   const jevSpeedEl = document.getElementById('val-jev-speed');
@@ -572,7 +572,7 @@ async function runPromptTest() {
             <span class="badge ${providerBadgeClass}">via ${providerName}</span>
           </div>
           <span style="font-size: 12px; font-weight: 700; color: var(--savings-green-dark); font-family: var(--font-mono);">
-            Saved +$${Number(c.savingsVsClaude || 0).toFixed(5)} vs Claude
+            Saved +$${Number(c.savingsVsClaude || 0).toFixed(5)} vs Frontier
           </span>
         </div>
 
