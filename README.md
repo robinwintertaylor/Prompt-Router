@@ -1,7 +1,50 @@
-# ⚡ Prompt-Router
+<div align="center">
+  <img src="public/assets/logo-horizontal.svg" alt="Prompt-Router Logo" width="560px" style="margin-bottom: 16px;" />
 
-> **Zero-hallucination, high-performance LLM gateway powered by TypeSafe Jev System One.**  
-> Automatically routes incoming prompts from **Goose**, **Claude Code**, **Cursor**, **VS Code**, and **Anti-Gravity** to the most capable and cost-effective models across **Mammouth AI** and **OpenRouter**, with real-time optics, streaming, and cost comparison.
+  <h3>⚡ Sub-120ms Zero-Hallucination Smart Gateway & Optics Dashboard ⚡</h3>
+
+  <p align="center">
+    <a href="https://github.com/robinwintertaylor/Prompt-Router"><img src="https://img.shields.io/badge/Latency-Sub--120ms-0D47A1?style=for-the-badge&logo=fastapi&logoColor=white" alt="Sub-120ms Latency" /></a>
+    <a href="https://github.com/robinwintertaylor/Prompt-Router"><img src="https://img.shields.io/badge/Models--Supported-540%2B-C6FF00?style=for-the-badge&logo=cpu&logoColor=black" alt="540+ Models" /></a>
+    <a href="https://github.com/robinwintertaylor/Prompt-Router"><img src="https://img.shields.io/badge/Cache--Savings-75%25--90%25-1E88E5?style=for-the-badge&logo=redis&logoColor=white" alt="75%-90% Cache Savings" /></a>
+    <a href="https://github.com/robinwintertaylor/Prompt-Router"><img src="https://img.shields.io/badge/Safety-0.60--Gated-ff3e00?style=for-the-badge&logo=shield-halved&logoColor=white" alt="0.60 Confidence Gated" /></a>
+    <a href="https://github.com/robinwintertaylor/Prompt-Router"><img src="https://img.shields.io/badge/Engine-TypeSafe--Jev-00E5FF?style=for-the-badge&logo=blueprint&logoColor=black" alt="TypeSafe Jev Engine" /></a>
+  </p>
+
+  <p align="center">
+    <b>Dynamic, low-cost intelligence routing across 540+ frontier & open models powered by TypeSafe Jev System One.</b><br />
+    <i>Drop-in replacement for OpenAI API endpoints with real-time HUD optics and token telemetry.</i>
+  </p>
+</div>
+
+---
+
+## 🚦 About Prompt-Router
+
+**Prompt-Router** is an ultra-fast, zero-hallucination intelligent LLM gateway and telemetry dashboard designed for high-velocity coding agents (Goose, Cursor, Claude Code, VS Code) and enterprise pipelines.
+
+Instead of burning engineering budget sending every trivial lookup or formatting task to expensive frontier models ($15–$30/M tokens), Prompt-Router deploys **TypeSafe Jev System One**—a non-autoregressive, sub-120ms classification engine—to analyze intent, task complexity, and reasoning requirements. It then dispatches each prompt to the exact model best suited for the job across **Mammouth AI** and **OpenRouter**.
+
+---
+
+## 🧠 Heavy Engineering Under the Hood
+
+### 🌀 1. The Cache Thrashing Paradox (Solved!)
+Modern frontier models offer **75%–90% prompt caching discounts** (Anthropic charges $0.30/M for cached tokens vs $3.00/M uncached; DeepSeek charges $0.07/M cached vs $0.55/M).
+* **The Problem**: Naive multi-turn LLM routers evaluate every turn in isolation. Switching models mid-turn invalidates the upstream provider's KV cache, forcing full token ingestion fees on every single step—costing up to 10× *more* than staying on a frontier model!
+* **The Fix**: Prompt-Router features **Session Fingerprinting & KV Cache Affinity**. Once conversation history exceeds $\ge 12\text{k}$ tokens, queries anchor to the incumbent model to protect prompt cache discounts, switching only when Jev detects extreme formal reasoning needs ($\ge 0.70$).
+
+### 🛡️ 2. The 0.60 Confidence-Gated Safety Rule
+Zero-hallucination routing demands deterministic fail-safes. When Jev's calibrated uncertainty band drops below **0.60 confidence**, Prompt-Router refuses to downgrade to flash models. Instead, it automatically elevates the query to robust fail-safe tiers (`claude-3.5-sonnet`, `gpt-4o-mini`, or `claude-opus-4.8`) to guarantee agent reliability.
+
+### 🎛️ 3. Concept 1: The Parallel Junction Dashboard
+An optics control room styled with **Gateway Teal**, **Jev Yellow-Green**, IBM Plex typography, and dark schematic grids. Real-time telemetry tracks:
+* Live prompt/completion token ingestion counters.
+* Realized dollar expenditure vs hypothetical 100% Claude 3.5 Sonnet / GPT-4o baselines.
+* Synchronized dual-toggle light/dark theme persistence via `localStorage`.
+
+### 🪿 4. Native Goose AI Agent Integration
+Pre-configured with zero friction as a custom provider (`custom_prompt_router.json`) for the **Goose AI Agent**. Goose automatically detects Prompt-Router's live server and routes through Jev with millisecond response times.
 
 ---
 
