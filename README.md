@@ -15,6 +15,10 @@
     <b>Schema-constrained routing across 540+ models using TypeSafe Jev System One.</b><br />
     <i>Drop-in replacement for OpenAI API endpoints with real-time HUD optics and token telemetry.</i>
   </p>
+
+  <p align="center">
+    <img src="public/assets/dashboard-demo.gif" alt="Prompt-Router Live Goose Session & Real-Time Savings Optics" width="100%" style="border-radius: 8px; border: 1px solid #162638; box-shadow: 0 8px 32px rgba(0,0,0,0.6); margin-top: 12px;" />
+  </p>
 </div>
 
 ---
