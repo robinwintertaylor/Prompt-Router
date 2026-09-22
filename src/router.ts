@@ -4,6 +4,7 @@ import { callOpenRouter } from './providers/openrouter.js';
 import { getSetting } from './db.js';
 import { config } from './config.js';
 import { getAllCatalogModels, getCatalogModel, CatalogModel } from './catalog.js';
+import { recordProviderPerformance, getArbitrageStatus } from './arbitrage.js';
 
 export interface RouteSelection {
   selectedModel: string;
@@ -245,9 +246,11 @@ export async function executeRoutedCompletion(
   const mammouthKey = getSetting('MAMMOUTH_API_KEY', config.mammouthApiKey);
   const openrouterKey = getSetting('OPENROUTER_API_KEY', config.openrouterApiKey);
 
-  // 3. Resolve target provider based on model availability in catalog
+  // 3. Resolve target provider based on model availability and real-time health arbitrage
   let primaryProvider: 'mammouth' | 'openrouter' = defaultProvider;
   let secondaryProvider: 'mammouth' | 'openrouter' = defaultProvider === 'mammouth' ? 'openrouter' : 'mammouth';
+
+  const arbitrage = getArbitrageStatus();
 
   if (providerHint === 'mammouth') {
     primaryProvider = 'mammouth';
@@ -256,33 +259,50 @@ export async function executeRoutedCompletion(
     primaryProvider = 'openrouter';
     secondaryProvider = 'mammouth';
   } else {
-    // Model is available on both aggregators: follow user's preferred default
-    if (primaryProvider === 'mammouth' && !mammouthKey && openrouterKey) {
+    // Model is available on both aggregators: check real-time latency & error arbitrage
+    if (arbitrage.recommendation === 'prefer_openrouter' && openrouterKey) {
+      console.log(`⚡ [Arbitrage] Mammouth is degraded (error rate: ${(arbitrage.mammouth.errorRate * 100).toFixed(0)}%, avg latency: ${arbitrage.mammouth.avgLatencyMs}ms). Arbitraging priority to OpenRouter.`);
       primaryProvider = 'openrouter';
       secondaryProvider = 'mammouth';
-    } else if (primaryProvider === 'openrouter' && !openrouterKey && mammouthKey) {
+    } else if (arbitrage.recommendation === 'prefer_mammouth' && mammouthKey) {
+      console.log(`⚡ [Arbitrage] OpenRouter is degraded (error rate: ${(arbitrage.openrouter.errorRate * 100).toFixed(0)}%, avg latency: ${arbitrage.openrouter.avgLatencyMs}ms). Arbitraging priority to Mammouth.`);
       primaryProvider = 'mammouth';
       secondaryProvider = 'openrouter';
+    } else {
+      // Normal preference based on key availability and configured default
+      if (primaryProvider === 'mammouth' && !mammouthKey && openrouterKey) {
+        primaryProvider = 'openrouter';
+        secondaryProvider = 'mammouth';
+      } else if (primaryProvider === 'openrouter' && !openrouterKey && mammouthKey) {
+        primaryProvider = 'mammouth';
+        secondaryProvider = 'openrouter';
+      }
     }
   }
 
   const modifiedBody = { ...body, model };
 
-  // 3. Dispatch to primary provider
+  // 4. Dispatch to primary provider and measure latency
+  const primaryStartTime = Date.now();
   let res = primaryProvider === 'mammouth'
     ? await callMammouth(modifiedBody, stream)
     : await callOpenRouter(modifiedBody, stream);
+  const primaryDuration = Date.now() - primaryStartTime;
+  recordProviderPerformance(primaryProvider, primaryDuration, res.ok);
 
   let activeProvider = primaryProvider;
 
-  // 4. Failover to secondary if primary failed
+  // 5. Failover to secondary if primary failed
   if (!res.ok) {
     const hasSecondaryKey = secondaryProvider === 'mammouth' ? !!mammouthKey : !!openrouterKey;
     if (hasSecondaryKey) {
-      console.warn(`[Router] Primary provider (${primaryProvider}) failed for model ${model}: ${res.error}. Failing over to ${secondaryProvider}...`);
+      console.warn(`[Router] Primary provider (${primaryProvider}) failed for model ${model} in ${primaryDuration}ms: ${res.error}. Failing over to ${secondaryProvider}...`);
+      const secondaryStartTime = Date.now();
       res = secondaryProvider === 'mammouth'
         ? await callMammouth(modifiedBody, stream)
         : await callOpenRouter(modifiedBody, stream);
+      const secondaryDuration = Date.now() - secondaryStartTime;
+      recordProviderPerformance(secondaryProvider, secondaryDuration, res.ok);
       if (res.ok) {
         activeProvider = secondaryProvider;
       }

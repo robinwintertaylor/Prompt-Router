@@ -1,6 +1,7 @@
 // Prompt-Router Dashboard Logic
 
 let currentLogs = [];
+let sseConnection = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   initApp();
@@ -8,16 +9,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initApp() {
   initTheme();
+  initTelemetryStream();
   fetchMetrics();
   fetchLogs();
   fetchSettings();
   fetchCatalog();
+  fetchArbitrageStatus();
 
-  // Polling every 4 seconds for live optics
+  // Polling every 6 seconds as background fallback for live optics
   setInterval(() => {
-    fetchMetrics();
-    fetchLogs();
-  }, 4000);
+    if (!sseConnection || sseConnection.readyState !== EventSource.OPEN) {
+      fetchMetrics();
+      fetchLogs();
+      fetchArbitrageStatus();
+    }
+  }, 6000);
 
   // Setup Event Listeners
   document.getElementById('btn-refresh').addEventListener('click', () => {
@@ -84,6 +90,183 @@ function initApp() {
   document.getElementById('log-search')?.addEventListener('input', (e) => {
     renderLogsTable(e.target.value.toLowerCase());
   });
+}
+
+// --------------------------------------------------------------------------
+// Real-Time SSE Telemetry & Dynamic Arbitrage Client
+// --------------------------------------------------------------------------
+function initTelemetryStream() {
+  if (!window.EventSource) return;
+
+  try {
+    sseConnection = new EventSource('/api/telemetry/stream');
+
+    sseConnection.addEventListener('initial_state', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload.metrics) renderMetrics(payload.metrics);
+        if (payload.arbitrage) updateArbitrageBadge(payload.arbitrage);
+        updateSseStatus(true);
+      } catch (err) {
+        console.warn('[Telemetry] Error in initial_state:', err);
+      }
+    });
+
+    sseConnection.addEventListener('request_completed', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload.metrics) {
+          renderMetrics(payload.metrics);
+          pulseMetricsCards();
+        }
+        if (payload.log) {
+          prependLiveLogRow(payload.log);
+        }
+        fetchArbitrageStatus();
+        updateSseStatus(true);
+      } catch (err) {
+        console.warn('[Telemetry] Error in request_completed:', err);
+      }
+    });
+
+    sseConnection.onopen = () => {
+      updateSseStatus(true);
+    };
+
+    sseConnection.onerror = () => {
+      updateSseStatus(false);
+    };
+  } catch (err) {
+    console.warn('[Telemetry] EventSource connection failed:', err);
+    updateSseStatus(false);
+  }
+}
+
+function updateSseStatus(connected) {
+  const el = document.getElementById('badge-sse-status');
+  if (!el) return;
+  if (connected) {
+    el.className = 'badge badge-live-stream';
+    el.textContent = '⚡ LIVE STREAM';
+    el.style.opacity = '1';
+  } else {
+    el.className = 'badge badge-warning';
+    el.textContent = '⚠️ POLLING (RECONNECTING)';
+  }
+}
+
+function updateArbitrageBadge(arbitrage) {
+  const el = document.getElementById('badge-arbitrage-status');
+  if (!el) return;
+
+  if (arbitrage.recommendation === 'prefer_openrouter') {
+    el.className = 'badge badge-arbitrage-alert';
+    el.textContent = 'ARBITRAGE: PREFER OPENROUTER';
+    el.title = `Mammouth error rate: ${(arbitrage.mammouth.errorRate * 100).toFixed(0)}%, latency: ${arbitrage.mammouth.avgLatencyMs}ms`;
+  } else if (arbitrage.recommendation === 'prefer_mammouth') {
+    el.className = 'badge badge-arbitrage-alert';
+    el.textContent = 'ARBITRAGE: PREFER MAMMOUTH';
+    el.title = `OpenRouter error rate: ${(arbitrage.openrouter.errorRate * 100).toFixed(0)}%, latency: ${arbitrage.openrouter.avgLatencyMs}ms`;
+  } else {
+    el.className = 'badge badge-arbitrage-ok';
+    el.textContent = 'ARBITRAGE: HEALTHY';
+    el.title = 'All upstream providers operating within nominal latency and zero error rate thresholds.';
+  }
+}
+
+async function fetchArbitrageStatus() {
+  try {
+    const res = await fetch('/api/arbitrage');
+    if (!res.ok) return;
+    const data = await res.json();
+    updateArbitrageBadge(data);
+  } catch (_) {
+    // Non-blocking
+  }
+}
+
+function pulseMetricsCards() {
+  const targets = [
+    document.getElementById('val-total-requests'),
+    document.getElementById('val-actual-cost'),
+    document.getElementById('val-savings'),
+    document.getElementById('val-total-tokens')
+  ];
+  for (const t of targets) {
+    if (t) {
+      t.classList.remove('val-pulse');
+      void t.offsetWidth; // Trigger reflow for clean re-animation
+      t.classList.add('val-pulse');
+    }
+  }
+}
+
+function prependLiveLogRow(log) {
+  currentLogs.unshift(log);
+  if (currentLogs.length > 50) currentLogs.pop();
+
+  const tbody = document.getElementById('logs-table-body');
+  if (!tbody) return;
+
+  const searchFilter = (document.getElementById('log-search')?.value || '').toLowerCase();
+  if (searchFilter) {
+    const matches =
+      (log.prompt_preview || '').toLowerCase().includes(searchFilter) ||
+      (log.model_routed || '').toLowerCase().includes(searchFilter) ||
+      (log.client_agent || '').toLowerCase().includes(searchFilter) ||
+      (log.jev_intent || '').toLowerCase().includes(searchFilter);
+    if (!matches) return;
+  }
+
+  if (tbody.querySelector('.empty-state')) {
+    tbody.innerHTML = '';
+  }
+
+  const timeStr = new Date(log.timestamp).toLocaleTimeString();
+  const intentBadge = getIntentBadge(log.jev_intent);
+  const savings = Number(log.savings_vs_claude || 0);
+  const clientName = escapeHtml(log.client_agent || 'client');
+  const clientBadgeClass = clientName.includes('cursor') ? 'badge-gateway' : 'badge-purple';
+
+  const tr = document.createElement('tr');
+  tr.className = 'row-live-highlight';
+  tr.innerHTML = `
+    <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">${timeStr}</td>
+    <td><span class="badge ${clientBadgeClass}">${clientName}</span></td>
+    <td style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(log.prompt_preview)}">
+      ${escapeHtml(log.prompt_preview || '')}
+    </td>
+    <td>
+      ${intentBadge}
+      <span class="badge badge-gateway" style="font-size: 10px;">${Number(log.jev_complexity).toFixed(1)}/5</span>
+    </td>
+    <td>
+      <strong style="color: var(--gateway-teal-dark);">${escapeHtml(log.model_routed)}</strong>
+      <span style="font-size: 10.5px; color: var(--text-muted); display: block;">via ${escapeHtml(log.provider_used)}</span>
+    </td>
+    <td style="font-family: var(--font-mono); font-size: 11.5px;">
+      ${(log.prompt_tokens + log.completion_tokens).toLocaleString()}
+      <span style="font-size: 10px; color: var(--text-muted); display: block;">${log.prompt_tokens} in / ${log.completion_tokens} out</span>
+    </td>
+    <td style="font-family: var(--font-mono); font-weight: 700; color: var(--gateway-teal-dark);">
+      $${Number(log.cost_actual).toFixed(4)}
+    </td>
+    <td style="font-family: var(--font-mono); color: var(--text-muted);">
+      $${Number(log.cost_if_claude).toFixed(4)}
+    </td>
+    <td style="font-family: var(--font-mono); font-weight: 700; color: var(--savings-green-dark);">
+      +$${savings.toFixed(4)}
+    </td>
+  `;
+
+  tbody.insertBefore(tr, tbody.firstChild);
+
+  while (tbody.children.length > 50) {
+    tbody.removeChild(tbody.lastChild);
+  }
+
+  const badgeCounter = document.getElementById('logs-counter-badge');
+  if (badgeCounter) badgeCounter.textContent = `${currentLogs.length} Requests`;
 }
 
 // Concept 1 Theme Switcher (Parallel Junction Light / Dark Mode)

@@ -3,6 +3,8 @@ import { calculateCosts } from '../src/pricing.js';
 import { evaluateWithJev } from '../src/jev.js';
 import { selectOptimalModel } from '../src/router.js';
 import { syncCatalog, getAllCatalogModels, getCatalogModel } from '../src/catalog.js';
+import { recordProviderPerformance, getArbitrageStatus, resetProviderMetrics } from '../src/arbitrage.js';
+import { addTelemetryClient, removeTelemetryClient, broadcastTelemetry } from '../src/telemetry.js';
 
 async function runTests() {
   console.log('🧪 Starting Prompt-Router verification tests...\n');
@@ -118,6 +120,61 @@ async function runTests() {
     throw new Error(`Expected uncertain eval to be elevated to safeguard model, but got ${safeRoute.model}`);
   }
   console.log('✅ Confidence-Gated Safety Fallback verified.\n');
+
+  // Test 3D: Testing Real-Time Latency & Error Arbitrage
+  console.log('Test 3D: Testing Real-Time Latency & Error Arbitrage...');
+  resetProviderMetrics();
+  // 1. Record healthy OpenRouter metrics
+  for (let i = 0; i < 5; i++) {
+    recordProviderPerformance('openrouter', 250, true);
+  }
+  // 2. Record degraded Mammouth metrics (high latency & errors)
+  recordProviderPerformance('mammouth', 7000, true);
+  recordProviderPerformance('mammouth', 8000, false);
+  recordProviderPerformance('mammouth', 6500, false);
+  
+  let arbStatus = getArbitrageStatus();
+  console.log(`• Arbitrage recommendation with degraded Mammouth: ${arbStatus.recommendation}`);
+  if (arbStatus.recommendation !== 'prefer_openrouter') {
+    throw new Error(`Expected 'prefer_openrouter', got '${arbStatus.recommendation}'`);
+  }
+
+  // 3. Reset and record degraded OpenRouter metrics (high error rate)
+  resetProviderMetrics();
+  for (let i = 0; i < 5; i++) {
+    recordProviderPerformance('mammouth', 180, true);
+  }
+  for (let i = 0; i < 4; i++) {
+    recordProviderPerformance('openrouter', 500, false);
+  }
+  arbStatus = getArbitrageStatus();
+  console.log(`• Arbitrage recommendation with degraded OpenRouter: ${arbStatus.recommendation}`);
+  if (arbStatus.recommendation !== 'prefer_mammouth') {
+    throw new Error(`Expected 'prefer_mammouth', got '${arbStatus.recommendation}'`);
+  }
+  console.log('✅ Real-Time Latency & Error Arbitrage verified.\n');
+
+  // Test 3E: Testing Live SSE Telemetry Client & Broadcasting
+  console.log('Test 3E: Testing Live SSE Telemetry Stream...');
+  let receivedBroadcast = false;
+  const mockRes: any = {
+    writable: true,
+    writableEnded: false,
+    write: (dataStr: string) => {
+      if (dataStr.includes('test_event') && dataStr.includes('latency-test')) {
+        receivedBroadcast = true;
+      }
+      return true;
+    }
+  };
+  addTelemetryClient('mock-test-client', mockRes);
+  broadcastTelemetry('test_event', { key: 'latency-test' });
+  removeTelemetryClient('mock-test-client');
+
+  if (!receivedBroadcast) {
+    throw new Error('Telemetry broadcast did not deliver payload to registered client');
+  }
+  console.log('✅ Live SSE Telemetry Stream verified.\n');
 
 
   // Test 4: Database logging & metrics aggregation
