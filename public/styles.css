@@ -1388,7 +1388,9 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: 20px;
+  padding: 24px 16px;
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 
 [data-theme="dark"] .modal-backdrop, [data-theme="dark"] .modal-overlay {
@@ -1401,7 +1403,10 @@ body {
   border-radius: 8px;
   box-shadow: var(--shadow-lg);
   width: 100%;
-  max-width: 580px;
+  max-width: 620px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   animation: modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1423,6 +1428,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 [data-theme="dark"] .modal-header-teal, [data-theme="dark"] .modal-header {
@@ -1445,10 +1451,13 @@ body {
   font-size: 22px;
   cursor: pointer;
   line-height: 1;
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 
 .modal-close-btn:hover, .btn-close:hover {
   color: var(--jev-yellow);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .modal-content-body, .modal-body {
@@ -1456,6 +1465,24 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Custom sleek scrollbar for modal content */
+.modal-content-body::-webkit-scrollbar {
+  width: 6px;
+}
+.modal-content-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.modal-content-body::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 3px;
+}
+[data-theme="dark"] .modal-content-body::-webkit-scrollbar-thumb {
+  background: #1E88E5;
 }
 
 .form-field, .form-group {
@@ -1522,6 +1549,7 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 [data-theme="dark"] .modal-action-footer, [data-theme="dark"] .modal-footer {
