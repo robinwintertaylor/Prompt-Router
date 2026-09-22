@@ -16,6 +16,12 @@ export function detectClientAgent(req: Request): string {
   if (ua.includes('antigravity') || ua.includes('anti-gravity')) return 'anti-gravity';
   if (ua.includes('python')) return 'python-sdk';
   if (ua.includes('node') || ua.includes('axios')) return 'node-client';
+
+  // Body context inspection for agent fingerprinting
+  const bodyStr = JSON.stringify(req.body || '').toLowerCase();
+  if (bodyStr.includes('<turn-context>') || bodyStr.includes('goose') || ua.includes('reqwest')) return 'goose';
+  if (bodyStr.includes('cursor_context') || bodyStr.includes('.cursor')) return 'cursor';
+
   return 'general-client';
 }
 export function extractSessionId(req: Request, messages: any[]): string {

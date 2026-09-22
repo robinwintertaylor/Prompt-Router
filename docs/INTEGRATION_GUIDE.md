@@ -13,26 +13,59 @@ Model:    auto (or jev-smart-router)
 
 ## 1. Goose AI Agent
 
-In your terminal or `~/.config/goose/config.yaml`:
+Goose can connect to Prompt-Router using either **Native Custom Provider Integration** (recommended) or standard **OpenAI Environment Overrides**.
 
+### Option A: Native Custom Provider (Already Configured on This Machine)
+Prompt-Router integrates natively into Goose's provider selector via:
+- **Windows Path**: `%APPDATA%\Block\goose\config\custom_providers\custom_prompt_router.json`
+- **Linux / macOS Path**: `~/.config/goose/custom_providers/custom_prompt_router.json`
+
+```json
+{
+  "name": "custom_prompt_router",
+  "engine": "openai",
+  "display_name": "Prompt-Router (Jev)",
+  "description": "Zero-hallucination Jev System One smart router gateway",
+  "api_key_env": "PROMPT_ROUTER_API_KEY",
+  "base_url": "http://localhost:4000/v1",
+  "models": [
+    {
+      "name": "auto",
+      "context_limit": 200000,
+      "reasoning": true
+    },
+    {
+      "name": "jev-smart-router",
+      "context_limit": 200000,
+      "reasoning": true
+    }
+  ]
+}
+```
+
+To run Goose using Prompt-Router:
 ```bash
-export OPENAI_BASE_URL="http://localhost:4000/v1"
-export OPENAI_API_KEY="prompt-router"
+# Start an interactive Goose session
+goose session --provider custom_prompt_router --model auto
 
-# Start Goose using auto-routing
+# Or run non-interactive prompts / recipes
+goose run -t "Your prompt here" --provider custom_prompt_router --model auto
+```
+
+### Option B: Quick Environment Variable Override
+In any terminal:
+```powershell
+# PowerShell
+$env:OPENAI_BASE_URL = "http://localhost:4000/v1"
+$env:OPENAI_API_KEY = "prompt-router"
 goose session --model auto
 ```
 
-Or configure the OpenAI provider in `config.yaml`:
-```yaml
-extensions:
-  developer:
-    enabled: true
-providers:
-  openai:
-    base_url: "http://localhost:4000/v1"
-    api_key: "prompt-router"
-default_model: "auto"
+```bash
+# Bash / Zsh
+export OPENAI_BASE_URL="http://localhost:4000/v1"
+export OPENAI_API_KEY="prompt-router"
+goose session --model auto
 ```
 
 ---
