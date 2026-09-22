@@ -55,6 +55,18 @@ An optics control room styled with **Gateway Teal**, **Jev Yellow-Green**, IBM P
 ### 🪿 6. Native Goose AI Agent Integration
 Pre-configured with zero friction as a custom provider (`custom_prompt_router.json`) for the **Goose AI Agent**. Goose automatically detects Prompt-Router's live server and routes through Jev with millisecond response times.
 
+### ⚡ 7. Real-Time Latency & Error Arbitrage
+Upstream aggregators and APIs frequently suffer from temporary regional brownouts, capacity limitations, or sudden latency spikes. Prompt-Router features an in-memory sliding-window health engine (`src/arbitrage.ts`):
+* **Sliding-Window Scoring**: Computes rolling error rate and average round-trip latency across the last 30 requests within a 3-minute decay window.
+* **Degradation Detection**: Automatically flags an aggregator if error rate exceeds $\ge 25\%$ or average latency exceeds $\ge 6,000\text{ ms}$.
+* **Dynamic Priority Arbitrage**: When a model is available on multiple providers, Prompt-Router dynamically swaps routing priority to the healthy provider, bypassing slow or failing aggregators without waiting for timeouts.
+* **Health API Endpoint**: Real-time status accessible via `GET /api/arbitrage`.
+
+### 📡 8. Live Server-Sent Events (SSE) Telemetry Stream
+Replaced 4-second dashboard polling with a zero-latency Server-Sent Events (`/api/telemetry/stream`) pipeline:
+* **Sub-100ms Ingress HUD**: Completed completions instantly broadcast token usage, calculated savings, and audit logs to the frontend.
+* **Animated Parallel Junction Interface**: Dashboard cards pulse on new requests (`val-pulse`), new queries slide into the table with a glowing green/teal highlight (`row-live-highlight`), and live connection indicators (`⚡ LIVE STREAM` & `ARBITRAGE: HEALTHY`) reflect real-time infrastructure state.
+
 ---
 
 ## 🌟 Key Highlights
