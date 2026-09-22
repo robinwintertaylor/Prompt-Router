@@ -1,6 +1,8 @@
 import { JevEvaluation } from './jev.js';
 import { callMammouth } from './providers/mammouth.js';
 import { callOpenRouter } from './providers/openrouter.js';
+import { callDirectOpenAICompatible } from './providers/direct_openai.js';
+import { callDirectAnthropic } from './providers/direct_anthropic.js';
 import { getSetting } from './db.js';
 import { config } from './config.js';
 import { getAllCatalogModels, getCatalogModel, CatalogModel } from './catalog.js';
@@ -8,7 +10,7 @@ import { recordProviderPerformance, getArbitrageStatus } from './arbitrage.js';
 
 export interface RouteSelection {
   selectedModel: string;
-  selectedProvider: 'mammouth' | 'openrouter';
+  selectedProvider: string;
   reasoning: string;
   catalogModel?: CatalogModel;
 }
@@ -255,6 +257,33 @@ function evaluateCandidateModel(
 }
 
 
+export function getDirectVendorIfConfigured(model: string): 'anthropic' | 'openai' | 'mistral' | 'deepseek' | 'google' | null {
+  const m = model.toLowerCase();
+
+  if (m.startsWith('anthropic/') || m.includes('claude')) {
+    const key = getSetting('ANTHROPIC_API_KEY', config.anthropicApiKey);
+    if (key && key.trim() !== '') return 'anthropic';
+  }
+  if (m.startsWith('openai/') || m.includes('gpt-') || m.includes('o1') || m.includes('o3')) {
+    const key = getSetting('OPENAI_API_KEY', config.openaiApiKey);
+    if (key && key.trim() !== '') return 'openai';
+  }
+  if (m.startsWith('mistralai/') || m.startsWith('mistral/') || m.includes('codestral') || m.includes('mistral')) {
+    const key = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
+    if (key && key.trim() !== '') return 'mistral';
+  }
+  if (m.startsWith('deepseek/') || m.includes('deepseek')) {
+    const key = getSetting('DEEPSEEK_API_KEY', config.deepseekApiKey);
+    if (key && key.trim() !== '') return 'deepseek';
+  }
+  if (m.startsWith('google/') || m.includes('gemini')) {
+    const key = getSetting('GEMINI_API_KEY', config.geminiApiKey);
+    if (key && key.trim() !== '') return 'google';
+  }
+
+  return null;
+}
+
 export async function executeRoutedCompletion(
   body: any,
   jev: JevEvaluation,
@@ -264,16 +293,39 @@ export async function executeRoutedCompletion(
 ): Promise<{
   providerResponse: any;
   selectedModel: string;
-  selectedProvider: 'mammouth' | 'openrouter';
+  selectedProvider: string;
   routingReason: string;
 }> {
   const strategy = (getSetting('ROUTING_STRATEGY', config.routingStrategy) as any) || 'cost_optimized';
   const defaultProvider = (getSetting('DEFAULT_PROVIDER', config.defaultProvider) as any) || 'mammouth';
 
-  // 1. Jev decides the best model across both aggregators (with session cache affinity)
+  // 1. Jev decides the best model across the catalog (with break-even session cache affinity)
   const { model, reason, providerHint } = selectOptimalModel(body.model, jev, strategy, sessionId, contextTokens);
 
-  // 2. Register / update active session anchor
+  // 2. Check Credential-Aware Direct Dispatch:
+  // If user configured direct credentials for this model's vendor, route direct to avoid aggregator markup/latency
+  const directVendor = getDirectVendorIfConfigured(model);
+  const modifiedBody = { ...body, model };
+
+  if (directVendor) {
+    const directRes = directVendor === 'anthropic'
+      ? await callDirectAnthropic(modifiedBody, stream)
+      : await callDirectOpenAICompatible(directVendor, modifiedBody, stream);
+
+    if (directRes.ok) {
+      console.log(`⚡ [Prompt-Router] Success: Routed prompt to model '${model}' via DIRECT ${directVendor.toUpperCase()} (Using account subscription/credentials)`);
+      return {
+        providerResponse: directRes,
+        selectedModel: model,
+        selectedProvider: directVendor,
+        routingReason: reason + ` [Direct ${directVendor.toUpperCase()} dispatch]`
+      };
+    } else {
+      console.warn(`[Router] Direct ${directVendor} call failed (${directRes.error}). Falling back to aggregator pool...`);
+    }
+  }
+
+  // 3. Register / update active session anchor
   if (sessionId) {
     const existing = sessionAffinityStore.get(sessionId);
     sessionAffinityStore.set(sessionId, {
@@ -288,7 +340,7 @@ export async function executeRoutedCompletion(
   const mammouthKey = getSetting('MAMMOUTH_API_KEY', config.mammouthApiKey);
   const openrouterKey = getSetting('OPENROUTER_API_KEY', config.openrouterApiKey);
 
-  // 3. Resolve target provider based on model availability and real-time health arbitrage
+  // 4. Resolve target provider based on model availability and real-time health arbitrage
   let primaryProvider: 'mammouth' | 'openrouter' = defaultProvider;
   let secondaryProvider: 'mammouth' | 'openrouter' = defaultProvider === 'mammouth' ? 'openrouter' : 'mammouth';
 
@@ -321,8 +373,6 @@ export async function executeRoutedCompletion(
       }
     }
   }
-
-  const modifiedBody = { ...body, model };
 
   // 4. Dispatch to primary provider and measure latency
   const primaryStartTime = Date.now();

@@ -95,9 +95,13 @@ Prompt-Router includes a high-fidelity optics dashboard (**Concept 1: The Parall
 
 
 
-## 🏗️ Architecture & Tri-Provider Engine
+## 🏗️ Architecture & Credential-Aware Dispatch
 
-Prompt-Router unifies public aggregators and enterprise cloud endpoints behind a single OpenAI-compatible `/v1/chat/completions` reverse proxy:
+**Core Principle: Jev decides the model, not the provider.**  
+Prompt-Router never steers or constrains Jev's cognitive choice. Instead, once Jev evaluates prompt difficulty and selects the winning model, the **Execution Dispatcher** resolves the optimal endpoint:
+1. **Direct Vendor Credentials**: If you have direct keys for the model's creator (**Anthropic**, **OpenAI**, **Mistral AI** for EU sovereignty, **DeepSeek**, or **Google Gemini**), Prompt-Router dispatches directly to their API—bypassing aggregators, eliminating middle-man latency, and using your existing subscriptions.
+2. **Aggregator Pool**: If no direct key is configured, requests route seamlessly through **Mammouth AI** or **OpenRouter** with real-time health arbitrage and automated failover.
+3. **Enterprise Cloud**: Corporate workloads bridge into **Azure AI Foundry** with Microsoft Entra ID and Private Link VNet isolation.
 
 ```
 +---------------------------------------------------------------------------------------+
@@ -125,9 +129,10 @@ Prompt-Router unifies public aggregators and enterprise cloud endpoints behind a
                     |                       |                       |
                     v                       v                       v
 +-----------------------+   +-----------------------+   +-----------------------+
-|   AZURE AI FOUNDRY    |   |      MAMMOUTH AI      |   |      OPENROUTER       |
-| Entra ID / Private VNet|   | European Sovereignty  |   | 540+ Model Catalog    |
-| GPT-6 / Llama / Phi-4 |   | Claude / GPT / Gemini |   | DeepSeek R1 / Open LLMs|
+|    DIRECT VENDORS     |   |      AGGREGATORS      |   |   ENTERPRISE CLOUD    |
+| Anthropic · OpenAI    |   | Mammouth AI (France)  |   | Azure AI Foundry      |
+| Mistral (EU) · Google |   | OpenRouter (540+)     |   | Entra ID / Private    |
+| DeepSeek Direct       |   | Rate Arbitrage & Fail |   | Sovereign Boundaries  |
 +-----------------------+   +-----------------------+   +-----------------------+
 ```
 
@@ -151,7 +156,28 @@ npm run build
 npm start   # Starts on http://localhost:4000
 ```
 
-### 2. Connect Your Coding Agent
+### 2. Configure Credentials (via Dashboard or .env)
+Configure keys either in `.env` or in the dashboard **Settings Modal** (`http://localhost:4000`):
+
+```env
+# 1. Non-Autoregressive Decision Engine
+TYPESAFE_API_KEY=ts_live_...       # https://typesafe.ai (120ms Jev System One)
+
+# 2. Direct Vendor Accounts (Optional - uses your existing subscriptions)
+MISTRAL_API_KEY=...                # https://console.mistral.ai (EU data residency)
+ANTHROPIC_API_KEY=...              # https://console.anthropic.com
+OPENAI_API_KEY=...                 # https://platform.openai.com
+DEEPSEEK_API_KEY=...               # https://platform.deepseek.com
+GEMINI_API_KEY=...                 # https://aistudio.google.com
+
+# 3. Fallback Aggregators & Enterprise Cloud
+OPENROUTER_API_KEY=sk-or-v1-...    # https://openrouter.ai (540+ models)
+MAMMOUTH_API_KEY=sk-mammouth-...   # https://mammouth.ai (France)
+AZURE_AI_FOUNDRY_ENDPOINT=...      # https://<resource>.services.ai.azure.com/models
+AZURE_AI_FOUNDRY_KEY=...           # Entra ID Bearer token or Azure API key
+```
+
+### 3. Connect Your Coding Agent
 * **Goose AI Agent**: Already pre-configured on install. Run:
   ```bash
   goose session --provider custom_prompt_router --model auto
