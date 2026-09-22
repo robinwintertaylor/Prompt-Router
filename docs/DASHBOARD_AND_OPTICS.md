@@ -76,10 +76,16 @@ http://localhost:4000/
 
 
 ### F. Aggregator Models Catalog Browser
-- View over 440+ live models synchronized from OpenRouter and Mammouth AI.
+- View over 540+ live models synchronized across OpenRouter, Mammouth AI, and Azure AI Foundry.
 - Filter by capability tier (`frontier_reasoning`, `frontier_coding`, `balanced`, `fast_cheap`).
 - Inspect real-time prompt and completion rates per million tokens.
 - On-demand "Sync Live Rates" button to update models and pricing directly from aggregator endpoints.
+
+### G. Real-Time Telemetry Stream & Arbitrage Indicators
+- **Live SSE Stream (`GET /api/telemetry/stream`)**: Direct Server-Sent Events stream delivering sub-100ms updates to connected dashboards without polling or manual refreshes.
+- **Provider Health & Arbitrage Pill**: Displays real-time upstream operational status (`ARBITRAGE: HEALTHY` or dynamic alerts when an aggregator experiences high error rates or $\ge 6,000\text{ ms}$ latency).
+- **Animated Value Pulses**: Total ingress requests, spend, and savings counters pulse dynamically (`val-pulse`) as background traffic from Goose, Cursor, or Claude Code completes.
+- **Glowing Audit Trail Ingestion**: Live requests slide into the top of the table highlighted in teal/green (`row-live-highlight`).
 
 ---
 
