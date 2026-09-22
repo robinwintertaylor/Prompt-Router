@@ -127,17 +127,17 @@ CREATE TABLE settings (
 
 ## 4. Multi-Turn Session Continuity & Cache Affinity Architecture
 
-When IDE clients (Cursor, Claude Code, Goose, Cline) engage in iterative software engineering, conversations rapidly accumulate 20,000 to 120,000 tokens of context (file reads, compiler outputs, terminal logs, and unified diffs).
+When IDE clients (Cursor, Goose, Cline) engage in iterative software engineering, conversations rapidly accumulate 20,000 to 120,000 tokens of context (file reads, compiler outputs, terminal logs, and unified diffs).
 
 ### A. The Cache Thrashing Dilemma
 All major frontier LLM providers implement **KV Prompt Caching**:
-- **Anthropic Claude 3.5 Sonnet**: $3.00/M base prompt input $\rightarrow$ **$0.30/M cached input** (90% discount).
+- **Anthropic Claude Fable 5.1**: $10.00/M base prompt input $\rightarrow$ **$1.00/M cached input** (90% discount).
 - **DeepSeek R1 / V3**: $0.55/M base prompt input $\rightarrow$ **$0.07/M cached input** (87% discount).
-- **OpenAI GPT-4o**: $2.50/M base prompt input $\rightarrow$ **$1.25/M cached input** (50% discount).
+- **OpenAI GPT-6 Astra**: $10.00/M base prompt input $\rightarrow$ **$1.25/M cached input** (87.5% discount).
 
-If a router switches models mid-thread (e.g. from Claude Sonnet to Gemini Flash for a simple follow-up, then back to Claude), it incurs two major penalties:
+If a router switches models mid-thread (e.g. from Claude Fable to Gemini Flash for a simple follow-up, then back to Claude), it incurs two major penalties:
 1. **Cache Invalidation**: The prompt cache on the primary model is invalidated.
-2. **Context Ingestion Overhead**: Re-evaluating 80k uncached tokens on an alternative model ($0.012–$0.035) plus re-populating the cache on the anchor model ($3.75/M cache write) costs **10x more** than simply paying for 80k cached tokens on the incumbent anchor model ($0.024).
+2. **Context Ingestion Overhead**: Re-evaluating 80k uncached tokens on an alternative model plus re-populating the cache on the anchor model ($10–$12.50/M cache write) costs **significantly more** than simply paying for 80k cached tokens on the incumbent anchor model ($0.080).
 
 ### B. Session Fingerprinting Engine
 Prompt-Router tracks conversational threads through deterministic identification:
