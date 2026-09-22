@@ -173,7 +173,7 @@ sudo systemctl status prompt-router
      "name": "custom_prompt_router",
      "engine": "openai",
      "display_name": "Prompt-Router (Jev)",
-     "description": "Zero-hallucination Jev System One smart router gateway",
+     "description": "Schema-constrained Jev System One smart router gateway",
      "api_key_env": "PROMPT_ROUTER_API_KEY",
      "base_url": "http://localhost:4000/v1",
      "models": [

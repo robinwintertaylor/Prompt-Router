@@ -25,7 +25,7 @@ Prompt-Router integrates natively into Goose's provider selector via:
   "name": "custom_prompt_router",
   "engine": "openai",
   "display_name": "Prompt-Router (Jev)",
-  "description": "Zero-hallucination Jev System One smart router gateway",
+  "description": "Schema-constrained Jev System One smart router gateway",
   "api_key_env": "PROMPT_ROUTER_API_KEY",
   "base_url": "http://localhost:4000/v1",
   "models": [
@@ -70,29 +70,31 @@ goose session --model auto
 
 ---
 
-## 2. Cursor IDE
+## 2. Cursor IDE (Requires Public Tunnel)
+
+> ⚠️ **Architecture Note**: Cursor processes custom OpenAI Base URL calls through its cloud infrastructure rather than directly from your local machine. Therefore, `http://localhost:4000/v1` will fail. You must expose Prompt-Router through a secure public tunnel:
+>
+> ```bash
+> # Expose port 4000 via ngrok
+> ngrok http 4000
+> ```
+> Copy the resulting HTTPS forwarding URL (e.g. `https://xxxx.ngrok-free.app/v1`).
 
 1. Open **Cursor Settings** (gear icon or `Ctrl+,` / `Cmd+,`).
 2. Navigate to **Models**.
 3. Under **OpenAI API Key**, input any placeholder string: `prompt-router`.
-4. Check **Override OpenAI Base URL** and enter:
+4. Check **Override OpenAI Base URL** and enter your public tunnel URL:
    ```
-   http://localhost:4000/v1
+   https://xxxx.ngrok-free.app/v1
    ```
-5. Click **Add Model** and add `auto`.
+5. Click **Add Model** and add `auto` (or `jev-smart-router`).
 6. Select `auto` as your active model in Cursor Chat and Composer.
 
 ---
 
-## 3. Claude Code CLI
+## 3. Anthropic Protocol Notice (Claude Code)
 
-When configuring Claude Code to connect via an OpenAI proxy:
-
-```bash
-export OPENAI_BASE_URL="http://localhost:4000/v1"
-export OPENAI_API_KEY="prompt-router"
-claude --model auto
-```
+> ℹ️ **Protocol Compatibility**: Claude Code communicates natively with the Anthropic Messages API (`/v1/messages`), whereas Prompt-Router emulates the OpenAI Protocol (`/v1/chat/completions`). To route Claude Code through Prompt-Router, run an Anthropic-to-OpenAI translation adapter or proxy. For native OpenAI-compatible agents (Goose, Cursor, VS Code Continue / Cline), no adapter is required.
 
 ---
 

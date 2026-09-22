@@ -1,7 +1,17 @@
 {
   "name": "prompt-router",
-  "version": "1.0.0",
-  "description": "",
+  "version": "0.1.0",
+  "description": "Sub-120ms smart LLM gateway & real-time optics dashboard using TypeSafe Jev System One",
+  "license": "MIT",
+  "keywords": [
+    "llm-router",
+    "llm-gateway",
+    "jev",
+    "typesafe",
+    "openai-compatible",
+    "prompt-caching",
+    "goose-agent"
+  ],
   "main": "index.js",
   "type": "module",
   "scripts": {

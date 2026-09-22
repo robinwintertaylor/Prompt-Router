@@ -7,34 +7,35 @@ Prompt-Router is a local or cloud-deployable reverse proxy designed to sit betwe
 It intercepts standard OpenAI API calls (`POST /v1/chat/completions`), extracts conversation context, and invokes a non-autoregressive decision model (**TypeSafe Jev System One**) to evaluate cognitive difficulty, task category, and reasoning requirements in ~120ms. Based on calibrated probabilistic outputs, it forwards the request to the optimal model and streams the completion back with zero perceived latency while recording full financial optics into an embedded SQLite database.
 
 ```
-+-------------------------------------------------------------------------+
-|                           DEVELOPER CLIENTS                             |
-|          Goose Agent · Claude Code · Cursor · VS Code · Anti-Gravity    |
-+------------------------------------+------------------------------------+
-                                     |
-                                     | POST /v1/chat/completions
-                                     v
-+-------------------------------------------------------------------------+
-|                         PROMPT-ROUTER GATEWAY                           |
-|                                                                         |
-|  +--------------------+   +-----------------------+   +---------------+ |
-|  | Context Extractor  |-->| Jev System One Client |-->| Decision      | |
-|  | & Sanitizer        |   | (~120ms parallel)     |   | Router Matrix | |
-|  +--------------------+   +-----------------------+   +-------+-------+ |
-|                                                               |         |
-|  +--------------------+   +-----------------------+           |         |
-|  | SSE Streaming      |<--| Financial Accounting  |<----------+         |
-|  | & Usage Collector  |   | & SQLite Ledger       |                     |
-|  +--------------------+   +-----------------------+                     |
-+------------------------------------+------------------------------------+
-                                     |
-                  +------------------+------------------+
-                  |                                     |
-                  v                                     v
-+----------------------------------+   +----------------------------------+
-|           MAMMOUTH AI            |   |           OPENROUTER             |
-|   Claude 3.5 · GPT-4o · Gemini   |   |   DeepSeek R1 · Specialist LLMs  |
-+----------------------------------+   +----------------------------------+
++---------------------------------------------------------------------------------------+
+|                                  DEVELOPER CLIENTS                                    |
+|         Goose Agent · Cursor (via Tunnel) · VS Code (Cline/Continue) · SDKs           |
++-------------------------------------------+-------------------------------------------+
+                                            |
+                                            | POST /v1/chat/completions
+                                            v
++---------------------------------------------------------------------------------------+
+|                                PROMPT-ROUTER GATEWAY                                  |
+|                                                                                       |
+|  +--------------------+   +-----------------------+   +-----------------------------+ |
+|  | Context & Session  |-->| Jev System One Client |-->| 0.60-Gated Cache Affinity   | |
+|  | KV Cache Extractor |   | (~120ms non-autoregr.)|   | & Arbitrage Decision Router | |
+|  +--------------------+   +-----------------------+   +--------------+--------------+ |
+|                                                                      |                |
+|  +--------------------+   +-----------------------+                  |                |
+|  | SSE Live Streaming |<--| Financial Accounting  |<-----------------+                |
+|  | & Usage Collector  |   | & SQLite Ledger       |                                   |
+|  +--------------------+   +-----------------------+                                   |
++-------------------------------------------+-------------------------------------------+
+                                            |
+                    +-----------------------+-----------------------+
+                    |                       |                       |
+                    v                       v                       v
++-----------------------+   +-----------------------+   +-----------------------+
+|   AZURE AI FOUNDRY    |   |      MAMMOUTH AI      |   |      OPENROUTER       |
+| Entra ID / Private VNet|   | European Sovereignty  |   | 540+ Model Catalog    |
+| GPT-6 / Llama / Phi-4 |   | Claude / GPT / Gemini |   | DeepSeek R1 / Open LLMs|
++-----------------------+   +-----------------------+   +-----------------------+
 ```
 
 ---
