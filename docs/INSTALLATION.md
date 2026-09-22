@@ -199,14 +199,10 @@ sudo systemctl status prompt-router
    goose session --provider custom_prompt_router --model auto
    ```
 
-### Claude Code CLI
-```bash
-export OPENAI_BASE_URL="http://localhost:4000/v1"
-export OPENAI_API_KEY="prompt-router"
-claude --model auto
-```
-
 ### Cursor IDE & VS Code (Cline / Continue)
-* **Base URL**: `http://localhost:4000/v1`
+* **Base URL**: `http://localhost:4000/v1` (or your public Ngrok tunnel for Cursor)
 * **API Key**: `prompt-router`
 * **Model**: `auto` (or `jev-smart-router`)
+
+### Anthropic Claude Code Note
+* Claude Code natively issues requests to the Anthropic `/v1/messages` protocol. To route Claude Code through Prompt-Router, run an Anthropic-to-OpenAI translation adapter.

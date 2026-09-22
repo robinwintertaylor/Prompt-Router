@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="1200" height="680" fill="none" style="background:#070C12; font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,sans-serif;">
+  <defs>
+    <pattern id="schematic-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#16222F" stroke-width="1" />
+      <circle cx="0" cy="0" r="1.5" fill="#1E88E5" opacity="0.3" />
+    </pattern>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F1722"/>
+      <stop offset="100%" stop-color="#0A1017"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="680" fill="#070C12" />
+  <rect width="1200" height="680" fill="url(#schematic-grid)" />
+
+  <!-- Top Banner / HUD Header -->
+  <rect x="0" y="0" width="1200" height="64" fill="#0A121A" stroke="#162638" stroke-width="1" />
+  
+  <g transform="translate(28, 14)">
+    <rect x="0" y="4" width="8" height="28" rx="2" fill="#0D47A1" />
+    <polygon points="12,6 2,20 10,20 6,32 18,16 10,16" fill="#C6FF00" />
+    <text x="26" y="24" fill="#FFFFFF" font-size="18" font-weight="800" letter-spacing="1">PROMPT<tspan fill="#00E5FF">-ROUTER</tspan></text>
+    <circle cx="178" cy="18" r="4" fill="#C6FF00" />
+    <text x="188" y="22" fill="#90CAF9" font-size="11" font-family="'IBM Plex Mono', monospace">GATEWAY ACTIVE :4000</text>
+  </g>
+
+  <g transform="translate(860, 18)">
+    <rect x="0" y="0" width="135" height="28" rx="4" fill="#0D2636" stroke="#00E5FF" stroke-width="1" />
+    <circle cx="14" cy="14" r="4" fill="#00E5FF" />
+    <text x="26" y="18" fill="#00E5FF" font-size="11" font-weight="700" font-family="'IBM Plex Mono', monospace">⚡ LIVE STREAM</text>
+
+    <rect x="145" y="0" width="165" height="28" rx="4" fill="#132B1A" stroke="#C6FF00" stroke-width="1" />
+    <circle cx="160" cy="14" r="4" fill="#C6FF00" />
+    <text x="172" y="18" fill="#C6FF00" font-size="11" font-weight="700" font-family="'IBM Plex Mono', monospace">ARBITRAGE: HEALTHY</text>
+  </g>
+
+  <!-- HUD KPI Metrics Grid -->
+  <g transform="translate(28, 88)">
+    <g transform="translate(0, 0)">
+      <rect width="175" height="116" rx="8" fill="url(#cardGrad)" stroke="#162638" stroke-width="1" />
+      <rect x="0" y="0" width="4" height="116" rx="2" fill="#C6FF00" />
+      <text x="16" y="26" fill="#88A0B8" font-size="11" font-weight="700">JEV SPEED</text>
+      <rect x="110" y="12" width="52" height="18" rx="3" fill="#0D2B24" stroke="#C6FF00" stroke-width="0.8" />
+      <text x="116" y="24" fill="#C6FF00" font-size="10" font-family="'IBM Plex Mono', monospace">⚡ 120ms</text>
+      <text x="16" y="68" fill="#C6FF00" font-size="30" font-weight="800" font-family="'IBM Plex Mono', monospace">120<tspan font-size="16" fill="#88A0B8"> ms</tspan></text>
+      <text x="16" y="96" fill="#6A8096" font-size="10.5">Schema decision pass</text>
+    </g>
+
+    <g transform="translate(192, 0)">
+      <rect width="175" height="116" rx="8" fill="url(#cardGrad)" stroke="#162638" stroke-width="1" />
+      <text x="16" y="26" fill="#88A0B8" font-size="11" font-weight="700">INGRESS REQUESTS</text>
+      <text x="16" y="68" fill="#FFFFFF" font-size="30" font-weight="800" font-family="'IBM Plex Mono', monospace">1,840</text>
+      <text x="16" y="96" fill="#6A8096" font-size="10.5">14.8M tokens in/out</text>
+    </g>
+
+    <g transform="translate(384, 0)">
+      <rect width="175" height="116" rx="8" fill="url(#cardGrad)" stroke="#162638" stroke-width="1" />
+      <text x="16" y="26" fill="#88A0B8" font-size="11" font-weight="700">ACTUAL ROUTED SPEND</text>
+      <text x="16" y="68" fill="#00E5FF" font-size="30" font-weight="800" font-family="'IBM Plex Mono', monospace">$19.82</text>
+      <text x="16" y="96" fill="#6A8096" font-size="10.5">Includes Jev + tokens</text>
+    </g>
+
+    <g transform="translate(576, 0)">
+      <rect width="175" height="116" rx="8" fill="url(#cardGrad)" stroke="#162638" stroke-width="1" />
+      <text x="16" y="26" fill="#88A0B8" font-size="11" font-weight="700">FRONTIER: FABLE 5.1</text>
+      <text x="16" y="68" fill="#FFB74D" font-size="30" font-weight="800" font-family="'IBM Plex Mono', monospace">$64.80</text>
+      <text x="16" y="96" fill="#6A8096" font-size="10.5">Benchmark: $10/$50 MTok</text>
+    </g>
+
+    <g transform="translate(768, 0)">
+      <rect width="175" height="116" rx="8" fill="url(#cardGrad)" stroke="#162638" stroke-width="1" />
+      <text x="16" y="26" fill="#88A0B8" font-size="11" font-weight="700">FRONTIER: GPT-6 ASTRA</text>
+      <text x="16" y="68" fill="#80CBC4" font-size="30" font-weight="800" font-family="'IBM Plex Mono', monospace">$64.80</text>
+      <text x="16" y="96" fill="#6A8096" font-size="10.5">Benchmark: $10/$50 MTok</text>
+    </g>
+
+    <g transform="translate(960, 0)">
+      <rect width="184" height="116" rx="8" fill="url(#cardGrad)" stroke="#00E5FF" stroke-width="1.5" />
+      <rect x="0" y="0" width="5" height="116" rx="2" fill="#00E5FF" />
+      <text x="16" y="26" fill="#00E5FF" font-size="11" font-weight="800">NET DOLLARS SAVED</text>
+      <text x="16" y="68" fill="#C6FF00" font-size="30" font-weight="800" font-family="'IBM Plex Mono', monospace">+$44.98</text>
+      <text x="16" y="96" fill="#C6FF00" font-size="11" font-weight="700">69.4% saved vs Frontier</text>
+    </g>
+  </g>
+
+  <!-- Section 2: Financial Optics Comparison Bars -->
+  <g transform="translate(28, 226)">
+    <rect width="560" height="200" rx="8" fill="url(#cardGrad)" stroke="#162638" stroke-width="1" />
+    <text x="20" y="32" fill="#FFFFFF" font-size="13" font-weight="700">💰 FINANCIAL OPTICS COMPARISON</text>
+    <text x="20" y="68" fill="#88A0B8" font-size="11">Prompt-Router (Dynamic Routed Actual)</text>
+    <text x="500" y="68" fill="#00E5FF" font-size="12" font-weight="700" font-family="'IBM Plex Mono', monospace">$19.82</text>
+    <rect x="20" y="78" width="520" height="10" rx="4" fill="#141E28" />
+    <rect x="20" y="78" width="160" height="10" rx="4" fill="#00E5FF" />
+    <text x="20" y="118" fill="#88A0B8" font-size="11">If 100% Anthropic Claude Fable 5.1</text>
+    <text x="500" y="118" fill="#FFB74D" font-size="12" font-weight="700" font-family="'IBM Plex Mono', monospace">$64.80</text>
+    <rect x="20" y="128" width="520" height="10" rx="4" fill="#141E28" />
+    <rect x="20" y="128" width="520" height="10" rx="4" fill="#FFB74D" />
+    <text x="20" y="168" fill="#88A0B8" font-size="11">If 100% OpenAI GPT-6 Astra</text>
+    <text x="500" y="168" fill="#80CBC4" font-size="12" font-weight="700" font-family="'IBM Plex Mono', monospace">$64.80</text>
+    <rect x="20" y="178" width="520" height="10" rx="4" fill="#141E28" />
+    <rect x="20" y="178" width="520" height="10" rx="4" fill="#80CBC4" />
+  </g>
+
+  <!-- Section 3: Model Routing Distribution -->
+  <g transform="translate(612, 226)">
+    <rect width="560" height="200" rx="8" fill="url(#cardGrad)" stroke="#162638" stroke-width="1" />
+    <text x="20" y="32" fill="#FFFFFF" font-size="13" font-weight="700">📊 MODEL ROUTING DISTRIBUTION</text>
+    <text x="20" y="70" fill="#E2EDF8" font-size="12" font-weight="600">Google Gemini 2.5 Flash</text>
+    <rect x="20" y="78" width="400" height="8" rx="4" fill="#141E28" />
+    <rect x="20" y="78" width="200" height="8" rx="4" fill="#C6FF00" />
+    <text x="435" y="86" fill="#88A0B8" font-size="11" font-family="'IBM Plex Mono', monospace">920 req (50%)</text>
+    <text x="20" y="118" fill="#E2EDF8" font-size="12" font-weight="600">OpenAI GPT-5.6-mini / Mistral Small</text>
+    <rect x="20" y="126" width="400" height="8" rx="4" fill="#141E28" />
+    <rect x="20" y="126" width="152" height="8" rx="4" fill="#00E5FF" />
+    <text x="435" y="134" fill="#88A0B8" font-size="11" font-family="'IBM Plex Mono', monospace">699 req (38%)</text>
+    <text x="20" y="166" fill="#E2EDF8" font-size="12" font-weight="600">DeepSeek R1 / Claude Fable (Frontier Reasoning)</text>
+    <rect x="20" y="174" width="400" height="8" rx="4" fill="#141E28" />
+    <rect x="20" y="174" width="48" height="8" rx="4" fill="#FFB74D" />
+    <text x="435" y="182" fill="#88A0B8" font-size="11" font-family="'IBM Plex Mono', monospace">221 req (12%)</text>
+  </g>
+
+  <!-- Section 4: Live Ingress Telemetry -->
+  <g transform="translate(28, 448)">
+    <rect width="1144" height="204" rx="8" fill="url(#cardGrad)" stroke="#162638" stroke-width="1" />
+    <text x="20" y="30" fill="#FFFFFF" font-size="13" font-weight="700">⚡ LIVE AUDIT TRAIL &amp; INGRESS TELEMETRY</text>
+    <text x="1020" y="30" fill="#00E5FF" font-size="11" font-family="'IBM Plex Mono', monospace">● 1,840 Logged</text>
+    <rect x="20" y="44" width="1104" height="26" fill="#131C28" rx="3" />
+    <text x="32" y="61" fill="#758B9E" font-size="10.5" font-weight="700">TIME</text>
+    <text x="120" y="61" fill="#758B9E" font-size="10.5" font-weight="700">CLIENT</text>
+    <text x="220" y="61" fill="#758B9E" font-size="10.5" font-weight="700">PROMPT CONTEXT</text>
+    <text x="560" y="61" fill="#758B9E" font-size="10.5" font-weight="700">JEV CLASSIFICATION</text>
+    <text x="760" y="61" fill="#758B9E" font-size="10.5" font-weight="700">ROUTED MODEL</text>
+    <text x="960" y="61" fill="#758B9E" font-size="10.5" font-weight="700">TOKENS</text>
+    <text x="1050" y="61" fill="#758B9E" font-size="10.5" font-weight="700">SAVINGS</text>
+
+    <!-- Row 1 -->
+    <rect x="20" y="74" width="1104" height="36" fill="#0E232E" stroke="#00E5FF" stroke-width="0.8" rx="2" />
+    <text x="32" y="96" fill="#88A0B8" font-size="11" font-family="'IBM Plex Mono', monospace">23:04:12</text>
+    <text x="120" y="96" fill="#00E5FF" font-size="11" font-weight="700">goose</text>
+    <text x="220" y="96" fill="#E2EDF8" font-size="11">Implement cache affinity break-even check...</text>
+    <text x="560" y="96" fill="#C6FF00" font-size="11">coding_complex (3.8/5)</text>
+    <text x="760" y="96" fill="#E2EDF8" font-size="11" font-weight="600">deepseek-r1</text>
+    <text x="960" y="96" fill="#88A0B8" font-size="11" font-family="'IBM Plex Mono', monospace">25,831</text>
+    <text x="1050" y="96" fill="#C6FF00" font-size="11" font-weight="700" font-family="'IBM Plex Mono', monospace">+$0.214</text>
+
+    <!-- Row 2 -->
+    <rect x="20" y="114" width="1104" height="36" fill="#0B131C" rx="2" />
+    <text x="32" y="136" fill="#88A0B8" font-size="11" font-family="'IBM Plex Mono', monospace">23:03:55</text>
+    <text x="120" y="136" fill="#90CAF9" font-size="11" font-weight="700">cursor</text>
+    <text x="220" y="136" fill="#E2EDF8" font-size="11">What is the return type of calculateCosts?</text>
+    <text x="560" y="136" fill="#80CBC4" font-size="11">factual_lookup (0.2/5)</text>
+    <text x="760" y="136" fill="#E2EDF8" font-size="11" font-weight="600">gemini-2.5-flash</text>
+    <text x="960" y="136" fill="#88A0B8" font-size="11" font-family="'IBM Plex Mono', monospace">1,420</text>
+    <text x="1050" y="136" fill="#C6FF00" font-size="11" font-weight="700" font-family="'IBM Plex Mono', monospace">+$0.012</text>
+  </g>
+</svg>

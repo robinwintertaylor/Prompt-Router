@@ -100,7 +100,7 @@ app.listen(config.port, config.host, () => {
   • Models Catalog:       Dynamic Auto-Syncing (400+ models)
   • Database:             SQLite (node:sqlite)
 =============================================================
-  Ready for Goose, Claude Code, Cursor, VS Code, Anti-Gravity!
+  Ready for Goose, Cursor, VS Code Continue / Cline, and OpenAI SDKs!
 =============================================================
   `);
 });

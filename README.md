@@ -24,21 +24,27 @@
 Most LLM routers evaluate every prompt in isolation. For single-turn chat, that works. **For coding agents (Goose, Cursor, VS Code Continue), it is economically broken.**
 
 Coding agents accumulate massive multi-turn conversation threads (15k to 100k+ tokens) containing repository maps, tool outputs, and code diffs. Modern frontier providers offer **75% to 90% prompt caching discounts**:
-* **Anthropic**: $0.30/M cached input vs $3.00/M uncached (90% discount)
-* **DeepSeek**: $0.07/M cached input vs $0.55/M uncached (87% discount)
+* **Frontier Anchor (e.g. Claude Fable 5.1 / GPT-6 Astra)**: $1.00/M cached input vs $10.00/M uncached (90% discount)
+* **DeepSeek R1 / V3**: $0.07/M cached input vs $0.55/M uncached (87% discount)
 
-### The Cache-Thrashing Trap
-When an agent builds up 60,000 tokens of context on a frontier model ($1.00/M cached rate), routing a mid-complexity question to an uncached mid-tier model ($1.50/M uncached rate) costs **$0.090 vs $0.060 to stay cached**.
-If that detour outlasts the provider's 5-minute cache TTL, returning to the anchor model later incurs a full cache-write penalty ($10–$12.50/M, or **$0.60–$0.75**). A naive switch intended to save pennies ends up costing dollars.
+### The Cache-Thrashing Paradox
+Consider an ongoing coding session with 60,000 tokens of context cached on a frontier anchor model ($1.00/M cached rate):
+* **Staying Anchored**: $60,000 \times \$1.00/\text{M} = \mathbf{\$0.060}$.
+* **Naive Switch to Mid-Tier Coder** ($1.50/M uncached): $60,000 \times \$1.50/\text{M} = \mathbf{\$0.090}$ (paying 50% more to use a weaker model).
+* **Naive Switch to Ultra-Cheap Flash** ($0.03/M uncached): The single turn looks cheap at $60,000 \times \$0.03/\text{M} = \mathbf{\$0.0018}$. **However**, provider prompt caches expire after a 5-minute inactivity TTL. While the developer reviews the Flash output, the anchor cache expires. When the next coding turn arrives, re-establishing the anchor cache incurs a full cache-write penalty ($10.00/M, or **$0.600**).
+  $$\text{Round-Trip Detour Cost} = \$0.0018 \text{ (Flash)} + \$0.600 \text{ (Anchor Rebuild)} = \mathbf{\$0.6018}$$
+  Staying anchored on the frontier model costs only **$0.060**. A naive detour intended to save pennies costs **10× more**!
 
 ### Prompt-Router's Solution: Break-Even Cache Affinity
 Instead of static rules or naive switching, Prompt-Router computes a **real-time break-even check**:
 
 $$\text{Expected Switch Cost} = \text{Cost}_{\text{candidate}}^{\text{uncached}} + \left(P_{\text{rebuild}} \times \text{Cost}_{\text{anchor}}^{\text{rebuild}}\right)$$
 
-* **Where Staying Wins**: 60k tokens cached on frontier ($1.00/M = $0.060). Candidate mid-tier coder ($1.50/M = $0.090) + TTL rebuild risk ($0.120) costs **$0.210**. Staying anchored is **71% cheaper**.
-* **Where Switching Wins**: Factual/trivial lookups where an ultra-cheap flash model ($0.03/M = $0.0018) genuinely beats the cached rate, or short threads (<4k tokens) before prompt caching triggers.
-* **Reasoning Override**: Dedicated chain-of-thought models (DeepSeek R1) override the anchor whenever Jev detects formal reasoning requirements ($\ge 0.70$).
+* **Where Staying Wins (Active Coding Loops)**: In an active multi-turn thread ($P_{\text{rebuild}} \approx 1.0$), the anchor cache is retained. Switching to an uncached candidate is rejected unless the candidate's cost plus expected rebuild penalty beats the warm anchor rate. Staying anchored is **70% to 90% cheaper**.
+* **Where Switching Wins**:
+  1. **Pre-Cache Contexts (<4,000 tokens)**: Early in a thread before provider prompt caching activates ($P_{\text{rebuild}} = 0$). Simple lookups route to Flash/Mini tiers for pure 95% savings.
+  2. **Terminal Turns / Isolated Queries**: Standalone tool executions or end-of-task summaries where no subsequent turn will require the anchor context ($P_{\text{rebuild}} = 0$).
+* **Reasoning Override**: Dedicated chain-of-thought models (DeepSeek R1) override the anchor whenever Jev detects formal algorithmic or mathematical reasoning ($\ge 0.70$), prioritizing cognitive capability over cache retention.
 
 ---
 ## 🛡️ Calibrated Confidence & The 0.60 Rule
@@ -54,8 +60,17 @@ We do not claim "zero hallucinations"—routers can misclassify, and whichever m
 
 ## 📊 7-Day Developer Case Study (Methodology & Numbers)
 
-* **Sample**: Single developer, 7 days, full-stack TypeScript/React/Node repositories using Goose AI Agent and Cursor IDE.
-* **Volume**: 1,840 queries, 14.8M total tokens (12.8M cached prompt tokens, 1.2M uncached prompt tokens, 0.8M completion tokens).
+### Methodology & Token Accounting
+* **Workload**: 1,840 recorded queries from a single developer over 7 consecutive working days building a full-stack TypeScript/React/Node repository with Goose AI Agent and Cursor IDE.
+* **Token Breakdown**:
+  * Uncached prompt tokens: **1.2M**
+  * Cached prompt tokens: **12.8M** (average context 42k tokens on active multi-turn threads)
+  * Completion output tokens: **0.8M**
+  * Total tokens processed: **14.8M**
+* **Baseline Arithmetic**:
+  * *All-Frontier Baseline (Claude Fable 5.1 / GPT-6 Astra)*: $1.2\text{M} \times \$10.00/\text{M} \text{ (uncached)} + 12.8\text{M} \times \$1.00/\text{M} \text{ (cached)} + 0.8\text{M} \times \$50.00/\text{M} \text{ (output)} = \mathbf{\$64.80}$.
+  * *Naive Router (No Cache Affinity)*: Frequent model detours triggered repeated 5-minute TTL cache evictions, causing $14.20 in cache-rebuild penalties and $38.40 total spend.
+  * *Prompt-Router (Break-Even + 0.60 Gate)*: Anchor retention preserved 12.1M tokens in cache, spending $19.20 on models and $0.62 on Jev System One for **$19.82 total spend (-69.4% vs Frontier)**.
 
 | Metric | All-Frontier Baseline (Claude Fable / GPT-6 Astra) | Naive Router (No Cache Affinity) | Prompt-Router (Break-Even + 0.60 Gate) |
 | :--- | :--- | :--- | :--- |
@@ -75,6 +90,13 @@ We do not claim "zero hallucinations"—routers can misclassify, and whichever m
 
 Prompt-Router includes a high-fidelity optics dashboard (**Concept 1: The Parallel Junction**) styled in Gateway Teal (`#0D47A1`), Jev Yellow-Green (`#C6FF00`), and dark schematic grids.
 
+<div align="center">
+  <img src="public/assets/dashboard-preview.svg" alt="Prompt-Router Real-Time Optics Dashboard" width="100%" style="border-radius: 8px; border: 1px solid #162638; box-shadow: 0 8px 24px rgba(0,0,0,0.5);" />
+</div>
+
+<details>
+<summary><b>View ASCII Terminal HUD Layout</b></summary>
+
 ```
 +------------------------------------------------------------------------------------+
 |  PROMPT-ROUTER              ⚡ LIVE STREAM  ● ARBITRAGE: HEALTHY    [Settings] [Theme]
@@ -89,6 +111,7 @@ Prompt-Router includes a high-fidelity optics dashboard (**Concept 1: The Parall
 |                                                • DeepSeek R1/Astra: 221 (12%)      
 +------------------------------------------------------------------------------------+
 ```
+</details>
 *(Backed by native Server-Sent Events `/api/telemetry/stream`—counters pulse and audit rows slide in with glowing animations in under 100ms without page refreshes.)*
 
 ---
@@ -185,7 +208,6 @@ AZURE_AI_FOUNDRY_KEY=...           # Entra ID Bearer token or Azure API key
 * **Cursor IDE (Requires Public Tunnel)**:
   > ⚠️ Cursor resolves custom OpenAI base URLs **server-side from Cursor's cloud**, not locally. Run `ngrok http 4000` and paste `https://xxxx.ngrok-free.app/v1` into *Cursor Settings ➔ Models ➔ OpenAI Base URL*. Add model `auto`.
 * **VS Code (Continue / Cline / Roo Code)**: Set provider to `OpenAI Compatible`, Base URL to `http://localhost:4000/v1`, and model to `auto`.
-* *Note on Claude Code*: Native Claude Code communicates with Anthropic's proprietary `/v1/messages` protocol and requires an adapter to connect to OpenAI-compatible endpoints.
 
 ---
 

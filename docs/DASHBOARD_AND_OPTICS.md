@@ -22,10 +22,9 @@ http://localhost:4000/
 |                                                                                    |
 +------------------------------------------------------------------------------------+
 |  [ COST COMPARISON BREAKDOWN ]                 [ MODEL ROUTING DISTRIBUTION ]      |
-|  Prompt-Router Actual: [==] $3.2450            • Gemini 2.5 Flash:  820 (58%)      |
-|  If 100% Claude 3.5:   [==========] $28.4010   • GPT-4o-mini:       410 (29%)      |
-|  If 100% GPT-4o:       [========] $19.1200     • Claude 3.5 Sonnet: 140 (10%)      |
-|                                                • DeepSeek R1:        50 (3%)       |
+|  Prompt-Router Actual: [==] $19.82             • Gemini 2.5 Flash:  920 (50%)      |
+|  If 100% Claude Fable: [==========] $64.8000   • GPT-5.6-mini:      699 (38%)      |
+|  If 100% GPT-6 Astra:  [==========] $64.8000   • DeepSeek R1/Astra: 221 (12%)      |
 +------------------------------------------------------------------------------------+
 |  [ INTERACTIVE PROMPT ROUTE SIMULATOR ]                                            |
 |  [ Enter prompt text...                                                   ] [Test] |
@@ -84,7 +83,7 @@ http://localhost:4000/
 ### G. Real-Time Telemetry Stream & Arbitrage Indicators
 - **Live SSE Stream (`GET /api/telemetry/stream`)**: Direct Server-Sent Events stream delivering sub-100ms updates to connected dashboards without polling or manual refreshes.
 - **Provider Health & Arbitrage Pill**: Displays real-time upstream operational status (`ARBITRAGE: HEALTHY` or dynamic alerts when an aggregator experiences high error rates or $\ge 6,000\text{ ms}$ latency).
-- **Animated Value Pulses**: Total ingress requests, spend, and savings counters pulse dynamically (`val-pulse`) as background traffic from Goose, Cursor, or Claude Code completes.
+- **Animated Value Pulses**: Total ingress requests, spend, and savings counters pulse dynamically (`val-pulse`) as background traffic from Goose, Cursor, or VS Code completes.
 - **Glowing Audit Trail Ingestion**: Live requests slide into the top of the table highlighted in teal/green (`row-live-highlight`).
 
 ---
