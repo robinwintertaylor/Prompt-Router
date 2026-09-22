@@ -2,14 +2,14 @@
 
 ## 1. What is Jev?
 
-Jev is TypeSafe AI's flagship **System One model** released in September 2026. Designed by OpenAI co-founder Diogo Almeida, it abandons autoregressive natural language text generation in favor of fast, structured, non-hallucinatory decisions.
+Jev is TypeSafe AI's flagship **System One model** released in September 2026. Designed by OpenAI co-founder Diogo Almeida, it abandons autoregressive natural language text generation in favor of fast, structured, schema-constrained decisions.
 
 ### Key Characteristics:
 - **Endpoint**: `POST https://api.typesafe.ai/v1/systemone`
 - **Model Identifier**: `jev-latest` (versioned alias pointing to `jev-1.13.0`)
 - **Latency**: 70ms to 150ms per evaluation
 - **Pricing**: $0.042 per million input tokens ($42 per billion tokens); output tokens are free by design
-- **Zero Hallucination**: Outputs are strictly constrained to pre-defined primitives and schema structures
+- **Schema-Constrained Primitives**: Outputs are strictly constrained to pre-defined primitives (`choice`, `score`, `noul`) with calibrated probability distributions
 - **Parallel Sampler**: Evaluates multiple questions over a shared state simultaneously in a single forward pass
 
 ---
