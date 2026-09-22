@@ -63,10 +63,14 @@
 
 ## 🚀 Quick Start
 
+> **Linux & macOS Users**: See the dedicated [🐧 Linux & macOS Installation Guide](docs/INSTALLATION.md) for Homebrew, NVM, and PM2/systemd background service setup.
+
 ### 1. Install & Build
 
+*Prerequisite: Node.js v24+ (uses native `node:sqlite` for zero-compilation database auditing).*
+
 ```bash
-git clone https://github.com/wintertaylorr/Prompt-Router.git
+git clone https://github.com/robinwintertaylor/Prompt-Router.git
 cd Prompt-Router
 npm install
 npm run build
@@ -89,11 +93,14 @@ DEFAULT_PROVIDER=mammouth
 ### 3. Start Prompt-Router
 
 ```bash
+# Production daemon with PM2 (Recommended)
+pm2 start dist/index.js --name prompt-router
+
+# Or standard Node process
+npm start
+
 # Development mode with live reload
 npm run dev
-
-# Or Production mode
-npm start
 ```
 
 Visit the optics dashboard at **`http://localhost:4000/`**.
@@ -106,7 +113,15 @@ Visit the optics dashboard at **`http://localhost:4000/`**.
 Point any tool using OpenAI-compatible configuration to `http://localhost:4000/v1`:
 
 ### 1. Goose AI Agent
-In your `~/.config/goose/config.yaml` or terminal environment:
+Prompt-Router supports both native Goose custom provider configuration and environment variable overrides:
+
+**Option A: Native Custom Provider**
+Add `custom_prompt_router.json` to Goose's `custom_providers` directory (see [docs/INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)) and run:
+```bash
+goose session --provider custom_prompt_router --model auto
+```
+
+**Option B: Environment Variables**
 ```bash
 export OPENAI_BASE_URL="http://localhost:4000/v1"
 export OPENAI_API_KEY="prompt-router"
