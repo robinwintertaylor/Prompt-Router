@@ -53,11 +53,11 @@ For every request $i$ with prompt tokens $T_{\text{in}}$ and completion tokens $
 ### 1. Actual Cost
 $$\text{Cost}_{\text{actual}} = \left(\frac{T_{\text{in}}^{\text{Jev}}}{10^6} \times 0.042\right) + \left(T_{\text{in}} \times \text{rate}_{\text{prompt}}^{\text{aggregator}} + T_{\text{out}} \times \text{rate}_{\text{completion}}^{\text{aggregator}}\right)$$
 
-### 2. Benchmark Cost: All Claude 3.5 Sonnet
+### 2. Benchmark Cost: All Claude Fable 5.1
 $$\text{Cost}_{\text{Claude}} = T_{\text{in}} \times \text{rate}_{\text{prompt}}^{\text{Claude}} + T_{\text{out}} \times \text{rate}_{\text{completion}}^{\text{Claude}}$$
 
-### 3. Benchmark Cost: All OpenAI GPT-4o
-$$\text{Cost}_{\text{GPT-4o}} = T_{\text{in}} \times \text{rate}_{\text{prompt}}^{\text{GPT-4o}} + T_{\text{out}} \times \text{rate}_{\text{completion}}^{\text{GPT-4o}}$$
+### 3. Benchmark Cost: All OpenAI GPT-6 Astra
+$$\text{Cost}_{\text{GPT-Astra}} = T_{\text{in}} \times \text{rate}_{\text{prompt}}^{\text{GPT-Astra}} + T_{\text{out}} \times \text{rate}_{\text{completion}}^{\text{GPT-Astra}}$$
 
 ### 4. Net Savings & Percentage Saved
 $$\text{Savings}_{\text{vs Claude}} = \max(0, \text{Cost}_{\text{Claude}} - \text{Cost}_{\text{actual}})$$
