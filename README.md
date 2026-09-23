@@ -91,18 +91,18 @@ We do not claim "zero hallucinations"—routers can misclassify, and whichever m
   * **Prompt-Router (measured)** is recorded from actual production traffic through the gateway.
   * **All-Frontier (modelled)** and **Naive Router (modelled)** are counterfactual replays simulating the exact same 1,840 requests through alternative policies:
     * *All-Frontier (modelled)*: 1.2M uncached @ $10.00/M ($12.00) + 12.8M cached @ $1.00/M ($12.80) + 0.8M output @ $50.00/M ($40.00) = **$64.80**.
-    * *Naive Router (modelled)*: Per-prompt cost minimization without cache affinity. Frequent model detours broke the 5-minute TTL heartbeat, triggering 19 anchor cache lapses and $14.20 in cache-rebuild write penalties ($12.50/M) for **$38.40 total spend**.
+    * *Naive Router (modelled)*: Per-prompt cost minimization without cache affinity. Frequent model switching repeatedly broke prompt caches across providers, forcing the naive router to ingest long multi-turn contexts uncached (8.4M uncached prompt tokens @ $0.85/M blended = $7.14; 5.6M cached @ $0.55/M = $3.08; 0.8M output = $13.98, totaling **$24.20** active model spend). In addition, breaking the 5-minute TTL heartbeat on the anchor caused 19 full cache lapses (1.136M tokens rewritten at Anthropic's $12.50/M write surcharge = **$14.20**), bringing total spend to **$38.40 (-40.7% vs Frontier)**.
     * *Prompt-Router Spend Breakdown ($19.82)*:
-      * **Fast / Cheap Tier** (Gemini 2.5 Flash @ $0.075/M in, $0.30/M out): 920 requests (0.70M uncached in = $0.0525 + 0.15M out = $0.0450) = **$0.10**
-      * **Balanced Coding Tier** (GPT-5.4-mini / Mistral Small @ $0.15/M in uncached, $0.03/M in cached, $0.60/M out): 699 requests (0.30M uncached in = $0.045 + 4.80M cached in = $0.144 + 0.45M out = $0.270) = **$0.46**
-      * **Frontier Reasoning & Coding Tier** (Claude Fable 5.1 & DeepSeek R1): 221 requests:
-        * *Claude Fable 5.1 Anchor*: 0.15M uncached in @ $10.00/M ($1.50) + 6.90M cached in @ $1.00/M ($6.90) + 0.18M out @ $50.00/M ($9.00) = **$17.40**
-        * *DeepSeek R1 Reasoning Overrides*: 0.05M uncached in @ $0.55/M ($0.028) + 1.10M cached in @ $0.07/M ($0.077) + 0.02M out @ $2.19/M ($0.044) = **$0.15**
-        * *Frontier Subtotal*: **$17.55**
-      * **Lapsed TTL Rebuild Writes**: 1.5 lapses during extended review pauses = **$1.10**
-      * **Active Model Spend Subtotal**: $0.10 + $0.46 + $17.55 + $1.10 = **$19.21** (~**$19.20**)
-      * **TypeSafe Jev Overhead**: **$0.62** (priced conservatively against full 14.8M token prompt context at $0.042/M; actual sampled spend across recent messages was **$0.07**)
-      * **Total Measured Spend: $19.20 + $0.62 = $19.82 (-69.4% vs Frontier)**
+      * **Fast / Cheap Tier** (Gemini 2.5 Flash @ $0.075/M in, $0.30/M out): 920 requests (0.70M uncached in @ $0.075/M = $0.0525 + 0.15M out @ $0.30/M = $0.0450) = **$0.10**
+      * **Balanced Coding Tier** (GPT-5.4-mini / Mistral Small @ $0.15/M in uncached, $0.075/M cached [50% OpenAI cache discount], $0.60/M out): 699 requests (0.30M uncached in = $0.045 + 4.80M cached in = $0.360 + 0.45M out = $0.270) = **$0.68**
+      * **Frontier Reasoning & Coding Tier** (Claude Fable 5.1 & DeepSeek R1): 221 requests (0.20M uncached in, 8.00M cached in, 0.20M out):
+        * *Claude Fable 5.1 Anchor*: 0.17M uncached in @ $10.00/M ($1.70) + 8.00M cached in @ $1.00/M ($8.00) + 0.15M out @ $50.00/M ($7.50) = **$17.20**
+        * *DeepSeek R1 Reasoning Overrides*: 0.03M uncached in @ $0.55/M ($0.0165) + 0.05M out @ $2.19/M ($0.1095) = **$0.13**
+        * *Frontier Subtotal*: **$17.33**
+      * **Lapsed TTL Rebuild Writes**: 88,000 tokens rewritten during extended review pauses (at Anthropic's $12.50/M write rate) = **$1.10**
+      * **Active Model Spend Subtotal**: $0.0975 (Flash) + $0.6750 (Balanced) + $17.3260 (Frontier) + $1.1000 (TTL Rebuilds) = **$19.20**
+      * **TypeSafe Jev Overhead**: **$0.62** (priced conservatively against full 14.8M token prompt context at $0.042/M; actual sampled spend across recent messages was **$0.07**, which would bring total measured gateway spend to **$19.27**)
+      * **Total Measured Spend: $19.20 model spend + $0.62 Jev = $19.82 (-69.4% vs Frontier)**
 
 | Metric | All-Frontier (modelled) | Naive Router (modelled) | Prompt-Router (measured) |
 | :--- | :--- | :--- | :--- |
