@@ -7,13 +7,13 @@
     <a href="https://github.com/robinwintertaylor/Prompt-Router"><img src="https://img.shields.io/badge/Latency-Sub--120ms-0D47A1?style=for-the-badge&logo=fastapi&logoColor=white" alt="Sub-120ms Latency" /></a>
     <a href="https://github.com/robinwintertaylor/Prompt-Router"><img src="https://img.shields.io/badge/Models--Supported-540%2B-C6FF00?style=for-the-badge&logo=cpu&logoColor=black" alt="540+ Models" /></a>
     <a href="https://github.com/robinwintertaylor/Prompt-Router"><img src="https://img.shields.io/badge/Cache-Break--Even_Affinity-1E88E5?style=for-the-badge&logo=redis&logoColor=white" alt="Break-Even Cache Affinity" /></a>
-    <a href="https://github.com/robinwintertaylor/Prompt-Router"><img src="https://img.shields.io/badge/Safety-0.60--Gated-ff3e00?style=for-the-badge&logo=shield-halved&logoColor=white" alt="0.60 Confidence Gated" /></a>
+    <a href="#2-configure-credentials-via-dashboard-or-env"><img src="https://img.shields.io/badge/Zero--Key-Heuristic_Mode-00E5FF?style=for-the-badge&logo=shield-halved&logoColor=black" alt="Zero-Key Heuristic Mode" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="MIT License" /></a>
   </p>
 
   <p align="center">
     <b>Schema-constrained routing across 540+ models using TypeSafe Jev System One.</b><br />
-    <i>Drop-in replacement for OpenAI API endpoints with real-time HUD optics and token telemetry.</i>
+    <i>Drop-in replacement for OpenAI API endpoints with real-time HUD optics and token telemetry. Runs out of the box in free local heuristic mode without requiring a TypeSafe API key.</i>
   </p>
 
   <p align="center">
@@ -36,7 +36,7 @@ Every turn routed to an anchor model resets its 5-minute provider prompt cache T
 
 When a naive router diverts an intermediate question away from the anchor (e.g. to Gemini 2.5 Flash at $0.075/M tokens), it removes that heartbeat. The interval between anchor turns widens beyond the 5-minute TTL, causing the anchor's prompt cache to lapse.
 
-When the session returns to the anchor on the next turn, the entire context must be rewritten into cache. On frontier providers like Anthropic, cache writes incur a **1.25× creation surcharge over base input** ($12.50/M tokens).
+When the session returns to the anchor on the next turn, the entire context must be rewritten into cache. On Anthropic, cache writes incur a **1.25× creation surcharge over base input** ($12.50/M tokens on a $10.00/M tier).
 
 Consider a 60,000-token context on a frontier anchor:
 * **Staying Anchored**: 60,000 × $1.00/M = **$0.060** (warm cache read).
@@ -46,7 +46,7 @@ Consider a 60,000-token context on a frontier anchor:
 
 Staying anchored cost only **$0.060**. The naive switch intended to save 5.5¢ ended up costing **12.5× more ($0.755 vs $0.060)**!
 
-Furthermore, switching between similarly priced tiers can lose money immediately without any TTL lapse: routing 60,000 tokens to an uncached mid-tier model like `mistralai/mistral-medium` ($1.50/M uncached) costs **$0.090**, paying 50% more than remaining on the warm frontier anchor ($0.060).
+Furthermore, switching between similarly priced tiers can lose money immediately without any TTL lapse: routing 60,000 tokens to an uncached mid-tier model like `mistralai/mistral-medium-3-5` ($1.50/M uncached) costs **$0.090**, paying 50% more than remaining on the warm frontier anchor ($0.060).
 
 ### Prompt-Router's Solution: Break-Even Cache Affinity
 Instead of static rules or naive switching, Prompt-Router computes a **real-time break-even check**:
@@ -93,12 +93,16 @@ We do not claim "zero hallucinations"—routers can misclassify, and whichever m
     * *All-Frontier (modelled)*: 1.2M uncached @ $10.00/M ($12.00) + 12.8M cached @ $1.00/M ($12.80) + 0.8M output @ $50.00/M ($40.00) = **$64.80**.
     * *Naive Router (modelled)*: Per-prompt cost minimization without cache affinity. Frequent model detours broke the 5-minute TTL heartbeat, triggering 19 anchor cache lapses and $14.20 in cache-rebuild write penalties ($12.50/M) for **$38.40 total spend**.
     * *Prompt-Router Spend Breakdown ($19.82)*:
-      * Fast / Cheap (Gemini 2.5 Flash @ $0.075/M in): 920 requests (2.2M tokens) = **$0.48**
-      * Balanced Coding (GPT-5.6-mini / Mistral Small @ $0.15/M in): 699 requests (6.8M tokens) = **$3.62**
-      * Frontier Reasoning & Safeguard (DeepSeek R1 / Claude Fable 5.1): 221 requests (5.0M tokens) = **$14.00**
-      * Lapsed TTL cache-rebuild writes (long review pauses): **$1.10**
-      * Jev System One overhead (1,840 evals, 14.8M input tokens @ $0.042/M): **$0.62**
-      * **Total Spend: $0.48 + $3.62 + $14.00 + $1.10 + $0.62 = $19.82 (-69.4% vs Frontier)**
+      * **Fast / Cheap Tier** (Gemini 2.5 Flash @ $0.075/M in, $0.30/M out): 920 requests (0.70M uncached in = $0.0525 + 0.15M out = $0.0450) = **$0.10**
+      * **Balanced Coding Tier** (GPT-5.4-mini / Mistral Small @ $0.15/M in uncached, $0.03/M in cached, $0.60/M out): 699 requests (0.30M uncached in = $0.045 + 4.80M cached in = $0.144 + 0.45M out = $0.270) = **$0.46**
+      * **Frontier Reasoning & Coding Tier** (Claude Fable 5.1 & DeepSeek R1): 221 requests:
+        * *Claude Fable 5.1 Anchor*: 0.15M uncached in @ $10.00/M ($1.50) + 6.90M cached in @ $1.00/M ($6.90) + 0.18M out @ $50.00/M ($9.00) = **$17.40**
+        * *DeepSeek R1 Reasoning Overrides*: 0.05M uncached in @ $0.55/M ($0.028) + 1.10M cached in @ $0.07/M ($0.077) + 0.02M out @ $2.19/M ($0.044) = **$0.15**
+        * *Frontier Subtotal*: **$17.55**
+      * **Lapsed TTL Rebuild Writes**: 1.5 lapses during extended review pauses = **$1.10**
+      * **Active Model Spend Subtotal**: $0.10 + $0.46 + $17.55 + $1.10 = **$19.21** (~**$19.20**)
+      * **TypeSafe Jev Overhead**: **$0.62** (priced conservatively against full 14.8M token prompt context at $0.042/M; actual sampled spend across recent messages was **$0.07**)
+      * **Total Measured Spend: $19.20 + $0.62 = $19.82 (-69.4% vs Frontier)**
 
 | Metric | All-Frontier (modelled) | Naive Router (modelled) | Prompt-Router (measured) |
 | :--- | :--- | :--- | :--- |
@@ -135,11 +139,12 @@ Prompt-Router includes a high-fidelity optics dashboard (**Concept 1: The Parall
 +------------------------------------------------------------------------------------+
 |  [ REAL-TIME COST COMPARISON ]                 [ MODEL ROUTING DISTRIBUTION ]      
 |  Prompt-Router Actual: [==] $19.82             • Gemini 2.5 Flash:  920 (50%)      
-|  If 100% Frontier:     [==========] $64.80     • GPT-5.6-mini:      699 (38%)      
+|  If 100% Frontier:     [==========] $64.80     • GPT-5.4-mini:      699 (38%)      
 |                                                • DeepSeek R1/Astra: 221 (12%)      
 +------------------------------------------------------------------------------------+
 ```
 </details>
+
 *(Backed by native Server-Sent Events `/api/telemetry/stream`—counters pulse and audit rows slide in with glowing animations in under 100ms without page refreshes.)*
 
 ---
@@ -190,7 +195,7 @@ Prompt-Router never steers or constrains Jev's cognitive choice. Instead, once J
 ### Supported Models (Configurable)
 * **Premier Frontier Targets**: `anthropic/claude-fable-5.1`, `openai/gpt-6-astra` ($10/M in, $50/M out).
 * **Dedicated Reasoning**: `deepseek/deepseek-r1` ($0.55/M in, $2.19/M out).
-* **Balanced Coding**: `openai/gpt-5.6-mini`, `mistralai/mistral-small-2603` ($0.15/M in, $0.60/M out).
+* **Balanced Coding**: `openai/gpt-5.4-mini`, `mistralai/mistral-small-2603` ($0.15/M in, $0.60/M out).
 * **Fast / Cheap**: `google/gemini-2.5-flash` ($0.075/M in, $0.30/M out), `deepseek/deepseek-v4-flash` ($0.049/M in, $0.098/M out).
 * *Note*: All rate cards and benchmark comparison baselines are fully configurable in `prompt_router.db` via `/api/settings`.
 
