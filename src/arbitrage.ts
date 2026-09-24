@@ -11,11 +11,38 @@ export interface ProviderHealth {
   avgLatencyMs: number;
   isDegraded: boolean;
   sampleCount: number;
+  budgetExceeded?: boolean;
 }
 
 const metricsBuffer: ProviderMetric[] = [];
 const BUFFER_MAX_AGE_MS = 3 * 60 * 1000; // 3 minutes decay window
 const MAX_SAMPLES_PER_PROVIDER = 30;
+
+let mammouthBudgetExceededUntil = 0;
+let openrouterBudgetExceededUntil = 0;
+
+export function markProviderBudgetExceeded(provider: 'mammouth' | 'openrouter', durationMs = 60 * 60 * 1000) {
+  if (provider === 'mammouth') {
+    mammouthBudgetExceededUntil = Date.now() + durationMs;
+  } else {
+    openrouterBudgetExceededUntil = Date.now() + durationMs;
+  }
+}
+
+export function clearProviderBudgetExceeded(provider: 'mammouth' | 'openrouter') {
+  if (provider === 'mammouth') {
+    mammouthBudgetExceededUntil = 0;
+  } else {
+    openrouterBudgetExceededUntil = 0;
+  }
+}
+
+export function isProviderBudgetExceeded(provider: 'mammouth' | 'openrouter'): boolean {
+  if (provider === 'mammouth') {
+    return Date.now() < mammouthBudgetExceededUntil;
+  }
+  return Date.now() < openrouterBudgetExceededUntil;
+}
 
 function purgeOldMetrics() {
   const cutoff = Date.now() - BUFFER_MAX_AGE_MS;
@@ -27,21 +54,36 @@ function purgeOldMetrics() {
 export function resetProviderMetrics(provider?: 'mammouth' | 'openrouter') {
   if (!provider) {
     metricsBuffer.length = 0;
+    mammouthBudgetExceededUntil = 0;
+    openrouterBudgetExceededUntil = 0;
   } else {
     for (let i = metricsBuffer.length - 1; i >= 0; i--) {
       if (metricsBuffer[i].provider === provider) {
         metricsBuffer.splice(i, 1);
       }
     }
+    clearProviderBudgetExceeded(provider);
   }
 }
 
 export function recordProviderPerformance(
   provider: 'mammouth' | 'openrouter',
   latencyMs: number,
-  success: boolean
+  success: boolean,
+  errorMessage?: string
 ) {
   purgeOldMetrics();
+
+  if (errorMessage && (
+    errorMessage.includes('budget_exceeded') ||
+    errorMessage.includes('ExceededBudget') ||
+    errorMessage.includes('insufficient_quota') ||
+    errorMessage.includes('insufficient_credits')
+  )) {
+    markProviderBudgetExceeded(provider);
+  } else if (success) {
+    clearProviderBudgetExceeded(provider);
+  }
 
   metricsBuffer.push({
     provider,
@@ -59,14 +101,28 @@ export function recordProviderPerformance(
 export function getProviderHealth(provider: 'mammouth' | 'openrouter'): ProviderHealth {
   purgeOldMetrics();
 
+  const budgetExceeded = isProviderBudgetExceeded(provider);
   const samples = metricsBuffer.filter(m => m.provider === provider);
+
+  if (budgetExceeded) {
+    return {
+      provider,
+      errorRate: 1.0,
+      avgLatencyMs: 0,
+      isDegraded: true,
+      sampleCount: samples.length,
+      budgetExceeded: true
+    };
+  }
+
   if (samples.length === 0) {
     return {
       provider,
       errorRate: 0,
       avgLatencyMs: 0,
       isDegraded: false,
-      sampleCount: 0
+      sampleCount: 0,
+      budgetExceeded: false
     };
   }
 
@@ -85,7 +141,8 @@ export function getProviderHealth(provider: 'mammouth' | 'openrouter'): Provider
     errorRate: Math.round(errorRate * 100) / 100,
     avgLatencyMs,
     isDegraded,
-    sampleCount: samples.length
+    sampleCount: samples.length,
+    budgetExceeded: false
   };
 }
 
@@ -98,9 +155,9 @@ export function getArbitrageStatus(): {
   const openrouter = getProviderHealth('openrouter');
 
   let recommendation: 'normal' | 'prefer_openrouter' | 'prefer_mammouth' = 'normal';
-  if (mammouth.isDegraded && !openrouter.isDegraded) {
+  if ((mammouth.isDegraded || mammouth.budgetExceeded) && !openrouter.isDegraded && !openrouter.budgetExceeded) {
     recommendation = 'prefer_openrouter';
-  } else if (openrouter.isDegraded && !mammouth.isDegraded) {
+  } else if ((openrouter.isDegraded || openrouter.budgetExceeded) && !mammouth.isDegraded && !mammouth.budgetExceeded) {
     recommendation = 'prefer_mammouth';
   }
 
