@@ -97,10 +97,11 @@ export async function callMammouth(body: any, stream = false): Promise<ProviderR
       provider: 'mammouth'
     };
   } catch (err: any) {
+    const cause = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
     return {
       ok: false,
       status: 502,
-      error: `Mammouth connection failed: ${err.message}`,
+      error: `Mammouth connection failed: ${err.message}${cause}`,
       provider: 'mammouth'
     };
   }

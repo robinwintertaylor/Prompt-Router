@@ -6,7 +6,12 @@ import { callDirectAnthropic } from './providers/direct_anthropic.js';
 import { getSetting } from './db.js';
 import { config } from './config.js';
 import { getAllCatalogModels, getCatalogModel, CatalogModel } from './catalog.js';
-import { recordProviderPerformance, getArbitrageStatus } from './arbitrage.js';
+import {
+  recordProviderPerformance,
+  getArbitrageStatus,
+  isProviderBudgetExceeded,
+  markProviderBudgetExceeded
+} from './arbitrage.js';
 
 export interface RouteSelection {
   selectedModel: string;
@@ -340,18 +345,40 @@ export async function executeRoutedCompletion(
   const mammouthKey = getSetting('MAMMOUTH_API_KEY', config.mammouthApiKey);
   const openrouterKey = getSetting('OPENROUTER_API_KEY', config.openrouterApiKey);
 
-  // 4. Resolve target provider based on model availability and real-time health arbitrage
+  // 4. Resolve target provider based on model availability, budget status, and real-time health arbitrage
+  const mammouthBudgetBlocked = isProviderBudgetExceeded('mammouth');
+  const openrouterBudgetBlocked = isProviderBudgetExceeded('openrouter');
+
   let primaryProvider: 'mammouth' | 'openrouter' = defaultProvider;
   let secondaryProvider: 'mammouth' | 'openrouter' = defaultProvider === 'mammouth' ? 'openrouter' : 'mammouth';
 
   const arbitrage = getArbitrageStatus();
 
-  if (providerHint === 'mammouth') {
-    primaryProvider = 'mammouth';
-    secondaryProvider = 'openrouter';
-  } else if (providerHint === 'openrouter') {
+  // If a provider has exceeded its budget quota, unconditionally route away from it
+  if (mammouthBudgetBlocked && openrouterKey) {
     primaryProvider = 'openrouter';
     secondaryProvider = 'mammouth';
+  } else if (openrouterBudgetBlocked && mammouthKey) {
+    primaryProvider = 'mammouth';
+    secondaryProvider = 'openrouter';
+  } else if (providerHint === 'mammouth') {
+    if (arbitrage.mammouth.isDegraded && openrouterKey) {
+      console.log(`⚡ [Arbitrage] Mammouth is degraded/errored. Rerouting model '${model}' priority to OpenRouter.`);
+      primaryProvider = 'openrouter';
+      secondaryProvider = 'mammouth';
+    } else {
+      primaryProvider = 'mammouth';
+      secondaryProvider = 'openrouter';
+    }
+  } else if (providerHint === 'openrouter') {
+    if (arbitrage.openrouter.isDegraded && mammouthKey) {
+      console.log(`⚡ [Arbitrage] OpenRouter is degraded/errored. Rerouting model '${model}' priority to Mammouth.`);
+      primaryProvider = 'mammouth';
+      secondaryProvider = 'openrouter';
+    } else {
+      primaryProvider = 'openrouter';
+      secondaryProvider = 'mammouth';
+    }
   } else {
     // Model is available on both aggregators: check real-time latency & error arbitrage
     if (arbitrage.recommendation === 'prefer_openrouter' && openrouterKey) {
@@ -374,29 +401,68 @@ export async function executeRoutedCompletion(
     }
   }
 
-  // 4. Dispatch to primary provider and measure latency
+  // 5. Dispatch to primary provider and measure latency
   const primaryStartTime = Date.now();
   let res = primaryProvider === 'mammouth'
     ? await callMammouth(modifiedBody, stream)
     : await callOpenRouter(modifiedBody, stream);
   const primaryDuration = Date.now() - primaryStartTime;
-  recordProviderPerformance(primaryProvider, primaryDuration, res.ok);
+  recordProviderPerformance(primaryProvider, primaryDuration, res.ok, res.error);
 
   let activeProvider = primaryProvider;
 
-  // 5. Failover to secondary if primary failed
+  // 6. Failover to secondary if primary failed
   if (!res.ok) {
+    const isBudgetError = res.error && (
+      res.error.includes('budget_exceeded') ||
+      res.error.includes('ExceededBudget') ||
+      res.error.includes('insufficient_quota') ||
+      res.error.includes('insufficient_credits')
+    );
+    if (isBudgetError) {
+      markProviderBudgetExceeded(primaryProvider);
+      console.warn(`🚨 [Arbitrage] ${primaryProvider.toUpperCase()} exceeded its account budget/quota. Tripping circuit breaker and routing future traffic to alternative providers.`);
+    }
+
     const hasSecondaryKey = secondaryProvider === 'mammouth' ? !!mammouthKey : !!openrouterKey;
-    if (hasSecondaryKey) {
+    const secondaryBudgetBlocked = isProviderBudgetExceeded(secondaryProvider);
+
+    if (hasSecondaryKey && !secondaryBudgetBlocked) {
       console.warn(`[Router] Primary provider (${primaryProvider}) failed for model ${model} in ${primaryDuration}ms: ${res.error}. Failing over to ${secondaryProvider}...`);
       const secondaryStartTime = Date.now();
       res = secondaryProvider === 'mammouth'
         ? await callMammouth(modifiedBody, stream)
         : await callOpenRouter(modifiedBody, stream);
       const secondaryDuration = Date.now() - secondaryStartTime;
-      recordProviderPerformance(secondaryProvider, secondaryDuration, res.ok);
+      recordProviderPerformance(secondaryProvider, secondaryDuration, res.ok, res.error);
       if (res.ok) {
         activeProvider = secondaryProvider;
+      }
+    }
+  }
+
+  // 7. Tier Safeguard Fallback: If both providers failed on the requested model,
+  // try an equivalent fallback model on the healthy provider so agent sessions do not fail
+  if (!res.ok && openrouterKey && !isProviderBudgetExceeded('openrouter')) {
+    let safeguardModel = 'openai/gpt-4o-mini';
+    if (model.includes('sonnet') || model.includes('opus') || model.includes('r1') || model.includes('gpt-4')) {
+      safeguardModel = 'openai/gpt-4o';
+    } else if (model.includes('flash') || model.includes('cheap')) {
+      safeguardModel = 'google/gemini-2.5-flash';
+    }
+
+    if (safeguardModel !== model) {
+      console.warn(`[Router] Primary and secondary providers failed for '${model}'. Attempting tier safeguard recovery with '${safeguardModel}' on OpenRouter...`);
+      const fallbackBody = { ...body, model: safeguardModel };
+      const fallbackRes = await callOpenRouter(fallbackBody, stream);
+      if (fallbackRes.ok) {
+        console.log(`⚡ [Prompt-Router] Safeguard recovery: Routed prompt to fallback model '${safeguardModel}' via OPENROUTER`);
+        return {
+          providerResponse: fallbackRes,
+          selectedModel: safeguardModel,
+          selectedProvider: 'openrouter',
+          routingReason: reason + ` [Recovered via safeguard '${safeguardModel}']`
+        };
       }
     }
   }
