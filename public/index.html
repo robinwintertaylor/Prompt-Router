@@ -47,6 +47,9 @@
           <button class="btn btn-secondary" id="btn-open-catalog" title="Inspect 546 synchronized models">
             📚 Models Catalog (<span id="catalog-count-display">...</span>)
           </button>
+          <a href="/reports" class="btn btn-secondary" title="Detailed Reporting & Decision Analytics" style="text-decoration: none;">
+            📊 Reports
+          </a>
           <button class="btn btn-secondary" id="btn-sync-catalog" title="Sync live rates from OpenRouter & Mammouth">
             🔄 Sync Aggregators
           </button>
@@ -79,6 +82,9 @@
           <button class="nav-tab-item" id="tab-catalog-quick">
             Catalog <span class="tab-badge" id="tab-models-count">546</span>
           </button>
+          <a href="/reports" class="nav-tab-item" style="text-decoration: none;" title="Detailed Granular Reporting">
+            📊 Detailed Reports ↗
+          </a>
         </div>
 
         <div class="strategy-toggle-wrap">
@@ -249,12 +255,12 @@
         <div class="sim-controls">
           <div class="preset-chip-list">
             <span class="chip-label">Presets:</span>
-            <button class="btn-chip" data-prompt="Hi, how are you today?">Greeting</button>
-            <button class="btn-chip" data-prompt="Write a Python function to reverse a string in place.">Simple Code</button>
-            <button class="btn-chip" data-prompt="Architect an event-driven microservices system with Kafka and vector clocks.">Complex Code</button>
-            <button class="btn-chip" data-prompt="If 3 cats catch 3 mice in 3 minutes, how many cats are needed to catch 100 mice in 100 minutes? Give mathematical proof.">Deep Reasoning</button>
+            <button class="btn-chip" type="button" data-prompt="Hi, how are you today?" title="Load 'Greeting' preset">Greeting</button>
+            <button class="btn-chip" type="button" data-prompt="Write a Python function to reverse a string in place." title="Load 'Simple Code' preset">Simple Code</button>
+            <button class="btn-chip" type="button" data-prompt="Architect an event-driven microservices system with Kafka and vector clocks." title="Load 'Complex Code' preset">Complex Code</button>
+            <button class="btn-chip" type="button" data-prompt="If 3 cats catch 3 mice in 3 minutes, how many cats are needed to catch 100 mice in 100 minutes? Give mathematical proof." title="Load 'Deep Reasoning' preset">Deep Reasoning</button>
           </div>
-          <button class="btn btn-gateway" id="btn-run-test">
+          <button class="btn btn-gateway" id="btn-run-test" type="button">
             ⚡ Intercept &amp; Route with Jev
           </button>
         </div>

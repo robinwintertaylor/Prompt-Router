@@ -48,14 +48,39 @@ function initApp() {
 
   document.getElementById('btn-run-test').addEventListener('click', runPromptTest);
 
-  // Playground preset chips
-  document.querySelectorAll('.btn-chip').forEach(btn => {
+  // Playground preset chips (populate textarea and mark active; does not auto-send)
+  const presetChips = document.querySelectorAll('.btn-chip');
+  const promptInput = document.getElementById('test-prompt-input');
+
+  presetChips.forEach(btn => {
     btn.addEventListener('click', (e) => {
-      const prompt = e.target.getAttribute('data-prompt');
-      document.getElementById('test-prompt-input').value = prompt;
-      runPromptTest();
+      const prompt = e.currentTarget.getAttribute('data-prompt');
+      if (promptInput) {
+        promptInput.value = prompt;
+        promptInput.focus();
+      }
+      presetChips.forEach(c => c.classList.remove('active'));
+      e.currentTarget.classList.add('active');
     });
   });
+
+  if (promptInput) {
+    promptInput.addEventListener('input', () => {
+      const currentVal = promptInput.value.trim();
+      presetChips.forEach(c => {
+        if (c.getAttribute('data-prompt') !== currentVal) {
+          c.classList.remove('active');
+        }
+      });
+    });
+
+    promptInput.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        runPromptTest();
+      }
+    });
+  }
 
   // Sub-toolbar Quick Tabs
   document.getElementById('tab-metrics')?.addEventListener('click', () => {
@@ -537,18 +562,94 @@ function getIntentBadge(intent) {
 }
 
 
+let routeTestTimer = null;
+let routeStepTimeouts = [];
+
+function clearRouteTimers() {
+  if (routeTestTimer) {
+    clearInterval(routeTestTimer);
+    routeTestTimer = null;
+  }
+  if (routeStepTimeouts && routeStepTimeouts.length > 0) {
+    routeStepTimeouts.forEach(t => clearTimeout(t));
+    routeStepTimeouts = [];
+  }
+}
+
 async function runPromptTest() {
   const input = document.getElementById('test-prompt-input');
-  const prompt = input.value.trim();
-  if (!prompt) return;
-
-  const btn = document.getElementById('btn-run-test');
-  btn.disabled = true;
-  btn.innerHTML = '⚡ Intercepting with Jev...';
-
+  const prompt = input ? input.value.trim() : '';
   const panel = document.getElementById('test-result-panel');
-  panel.classList.remove('hidden');
-  panel.innerHTML = '<div class="empty-state">Executing The Parallel Junction: Jev System One non-autoregressive 120ms pass &amp; dynamic aggregator dispatch...</div>';
+  const btn = document.getElementById('btn-run-test');
+
+  if (!prompt) {
+    if (input) input.focus();
+    if (panel) {
+      panel.classList.remove('hidden');
+      panel.innerHTML = `
+        <div class="sim-validation-notice">
+          <span>⚠️ <strong>Prompt required:</strong> Please type a prompt or choose one of the presets above, then click <strong>⚡ Intercept &amp; Route with Jev</strong>.</span>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  clearRouteTimers();
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span> Routing Prompt...';
+  }
+
+  if (panel) {
+    panel.classList.remove('hidden');
+    panel.innerHTML = `
+      <div class="route-loading-card">
+        <div class="route-loading-header">
+          <div class="route-loading-title">
+            <span class="status-dot-pulse"></span>
+            <span>Routing your prompt with Jev...</span>
+          </div>
+          <span class="route-timer-badge" id="route-loading-timer">⏱️ 0.0s</span>
+        </div>
+        <div class="route-progress-track">
+          <div class="route-progress-bar"></div>
+        </div>
+        <div class="route-loading-status" id="route-loading-status">
+          ⚡ Jev System One intercepting &amp; analyzing intent...
+        </div>
+        <div class="route-loading-hint">
+          Sub-120ms non-autoregressive complexity assessment &amp; optimal aggregator dispatch in progress.
+        </div>
+      </div>
+    `;
+  }
+
+  const startTime = Date.now();
+  routeTestTimer = setInterval(() => {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    const timerEl = document.getElementById('route-loading-timer');
+    if (timerEl) {
+      timerEl.textContent = `⏱️ ${elapsed}s`;
+    }
+  }, 100);
+
+  const statusProgression = [
+    { delay: 350, text: '🎯 Checking real-time rates across Mammouth AI &amp; OpenRouter...' },
+    { delay: 1100, text: '📡 Dispatching to optimal aggregator and streaming completion...' },
+    { delay: 3200, text: '⏳ Awaiting upstream model completion stream &amp; token telemetry...' }
+  ];
+
+  statusProgression.forEach(step => {
+    const t = setTimeout(() => {
+      const statusEl = document.getElementById('route-loading-status');
+      if (statusEl && btn && btn.disabled) {
+        statusEl.innerHTML = step.text;
+      }
+    }, step.delay);
+    routeStepTimeouts.push(t);
+  });
 
   try {
     const res = await fetch('/api/test-route', {
@@ -558,6 +659,12 @@ async function runPromptTest() {
     });
 
     const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+
+    clearRouteTimers();
+
     const j = data.jev || {};
     const c = data.costs || {};
     const providerName = data.selectedProvider === 'openrouter' ? 'OpenRouter' : 'Mammouth AI';
@@ -616,10 +723,21 @@ async function runPromptTest() {
     fetchMetrics();
     fetchLogs();
   } catch (err) {
-    panel.innerHTML = `<div style="color: #D32F2F; padding: 12px;">Error evaluating route: ${escapeHtml(err.message)}</div>`;
+    clearRouteTimers();
+    panel.innerHTML = `
+      <div class="sim-error-card">
+        <div style="font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+          <span>⚠️</span> Error Evaluating Route
+        </div>
+        <div style="font-size: 12.5px;">${escapeHtml(err.message)}</div>
+      </div>
+    `;
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '⚡ Intercept &amp; Route with Jev';
+    clearRouteTimers();
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '⚡ Intercept &amp; Route with Jev';
+    }
   }
 }
 

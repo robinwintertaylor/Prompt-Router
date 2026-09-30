@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { getMetrics, getRecentLogs, getSetting, setSetting } from '../db.js';
+import crypto from 'crypto';
+import { getMetrics, getRecentLogs, getSetting, setSetting, getDetailedReport, getLogById, ReportFilters } from '../db.js';
 import { evaluateWithJev } from '../jev.js';
 import { selectOptimalModel, executeRoutedCompletion } from '../router.js';
 import { calculateCosts } from '../pricing.js';
@@ -7,6 +8,7 @@ import { config } from '../config.js';
 import { getAllCatalogModels, syncCatalog } from '../catalog.js';
 import { addTelemetryClient, removeTelemetryClient } from '../telemetry.js';
 import { getArbitrageStatus } from '../arbitrage.js';
+import { recordAndBroadcastRequest } from './completions.js';
 
 export function getFormattedMetrics() {
   const data = getMetrics();
@@ -138,7 +140,35 @@ export async function handleTestRoute(req: Request, res: Response) {
 
     const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens);
 
+    const reqId = 'sim-' + crypto.randomUUID().slice(0, 8);
+    const durationMs = (jev.jevDurationMs || 120) + 160;
+    recordAndBroadcastRequest({
+      id: reqId,
+      client_agent: 'simulator',
+      model_requested: 'auto',
+      model_routed: selectedModel,
+      provider_used: selectedProvider,
+      jev_intent: jev.intent,
+      jev_complexity: jev.complexityScore,
+      jev_confidence: jev.intentConfidence,
+      jev_needs_reasoner: jev.needsReasoner,
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
+      duration_ms: durationMs,
+      jev_duration_ms: jev.jevDurationMs || 120,
+      cost_jev: costs.jevCost,
+      cost_actual: costs.totalActualCost,
+      cost_if_claude: costs.costIfClaude,
+      cost_if_gpt4o: costs.costIfGpt4o,
+      savings_vs_claude: costs.savingsVsClaude,
+      prompt_preview: prompt.slice(0, 150),
+      routing_reason: routingReason,
+      response_preview: responseContent.slice(0, 300)
+    });
+
     res.json({
+      id: reqId,
       prompt,
       jev,
       selectedModel,
@@ -152,6 +182,99 @@ export async function handleTestRoute(req: Request, res: Response) {
       },
       costs
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export function handleGetReports(req: Request, res: Response) {
+  try {
+    const filters: ReportFilters = {
+      timeframe: (req.query.timeframe as string) || 'all',
+      model: (req.query.model as string) || 'all',
+      provider: (req.query.provider as string) || 'all',
+      intent: (req.query.intent as string) || 'all',
+      client: (req.query.client as string) || 'all',
+      search: (req.query.search as string) || '',
+      limit: parseInt((req.query.limit as string) || '50', 10),
+      offset: parseInt((req.query.offset as string) || '0', 10)
+    };
+
+    const report = getDetailedReport(filters);
+
+    if (req.query.format === 'csv') {
+      const headers = [
+        'ID',
+        'Timestamp',
+        'Client_Agent',
+        'Model_Requested',
+        'Model_Routed',
+        'Provider_Used',
+        'Jev_Intent',
+        'Jev_Complexity',
+        'Jev_Confidence',
+        'Prompt_Tokens_Sent',
+        'Completion_Tokens_Received',
+        'Total_Tokens',
+        'Duration_Ms',
+        'Jev_Duration_Ms',
+        'Cost_Actual_USD',
+        'Cost_If_Claude_USD',
+        'Cost_If_GPT4o_USD',
+        'Savings_Vs_Claude_USD',
+        'Routing_Reason',
+        'Prompt_Preview'
+      ];
+
+      const escapeCsv = (val: any) => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+      };
+
+      const rows = report.logs.map((log: any) => [
+        escapeCsv(log.id),
+        escapeCsv(log.timestamp),
+        escapeCsv(log.client_agent),
+        escapeCsv(log.model_requested),
+        escapeCsv(log.model_routed),
+        escapeCsv(log.provider_used),
+        escapeCsv(log.jev_intent),
+        escapeCsv(log.jev_complexity),
+        escapeCsv(log.jev_confidence),
+        log.prompt_tokens,
+        log.completion_tokens,
+        log.total_tokens,
+        log.duration_ms,
+        log.jev_duration_ms,
+        Number(log.cost_actual || 0).toFixed(6),
+        Number(log.cost_if_claude || 0).toFixed(6),
+        Number(log.cost_if_gpt4o || 0).toFixed(6),
+        Number(log.savings_vs_claude || 0).toFixed(6),
+        escapeCsv(log.routing_reason),
+        escapeCsv(log.prompt_preview)
+      ].join(','));
+
+      const csvContent = [headers.join(','), ...rows].join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="prompt-router-report.csv"');
+      return res.send(csvContent);
+    }
+
+    res.json(report);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export function handleGetLogDetail(req: Request, res: Response) {
+  try {
+    const id = String(req.params.id || '');
+    const log = getLogById(id);
+    if (!log) {
+      return res.status(404).json({ error: 'Log entry not found' });
+    }
+    res.json({ log });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

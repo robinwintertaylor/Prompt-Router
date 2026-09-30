@@ -18,7 +18,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node --use-system-ca dist/index.js",
-    "test": "tsx test/test-router.ts && tsx test/test-heuristic.ts"
+    "test": "tsx test/test-reporting.ts && tsx test/test-heuristic.ts"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

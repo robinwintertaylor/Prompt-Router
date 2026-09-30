@@ -16,7 +16,9 @@ import {
   handleGetCatalog,
   handleSyncCatalog,
   handleTelemetryStream,
-  handleGetArbitrage
+  handleGetArbitrage,
+  handleGetReports,
+  handleGetLogDetail
 } from './routes/api.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -76,11 +78,18 @@ app.get('/api/metrics', handleGetMetrics);
 app.get('/api/telemetry/stream', handleTelemetryStream);
 app.get('/api/arbitrage', handleGetArbitrage);
 app.get('/api/logs', handleGetLogs);
+app.get('/api/logs/:id', handleGetLogDetail);
+app.get('/api/reports', handleGetReports);
 app.post('/api/test-route', handleTestRoute);
 app.get('/api/settings', handleGetSettings);
 app.post('/api/settings', handleUpdateSettings);
 app.get('/api/catalog', handleGetCatalog);
 app.post('/api/catalog/sync', handleSyncCatalog);
+
+// Detailed Reporting Page
+app.get(['/reports', '/reporting'], (req, res) => {
+  res.sendFile(path.join(publicDir, 'reports.html'));
+});
 
 // Dashboard fallback
 app.get(['/', '/dashboard'], (req, res) => {
