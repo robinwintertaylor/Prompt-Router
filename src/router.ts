@@ -3,6 +3,8 @@ import { callMammouth } from './providers/mammouth.js';
 import { callOpenRouter } from './providers/openrouter.js';
 import { callDirectOpenAICompatible } from './providers/direct_openai.js';
 import { callDirectAnthropic } from './providers/direct_anthropic.js';
+import { callAcpBridge } from './providers/acp_bridge.js';
+import { getSubscription } from './subscriptions.js';
 import { getSetting } from './db.js';
 import { config } from './config.js';
 import { getAllCatalogModels, getCatalogModel, CatalogModel } from './catalog.js';
@@ -18,11 +20,12 @@ export interface RouteSelection {
   selectedProvider: string;
   reasoning: string;
   catalogModel?: CatalogModel;
+  isSubscription?: boolean;
 }
 export interface SessionAffinity {
   anchorModel: string;
   provider: 'mammouth' | 'openrouter';
-  providerHint?: 'mammouth' | 'openrouter' | 'both';
+  providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free';
   turnCount: number;
   lastSeen: number;
 }
@@ -44,7 +47,7 @@ export function selectOptimalModel(
   strategy: 'cost_optimized' | 'performance_optimized' | 'balanced' = 'cost_optimized',
   sessionId?: string,
   contextTokens = 0
-): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' } {
+): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free'; isSubscription?: boolean } {
   const req = (requestedModel || '').toLowerCase();
   const isAuto =
     !req ||
@@ -120,7 +123,7 @@ export function selectOptimalModel(
     }
   }
 
-  function finalizeDecision(res: { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' }) {
+  function finalizeDecision(res: { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free'; isSubscription?: boolean }) {
     if (sessionId) {
       const existing = sessionAffinityStore.get(sessionId);
       sessionAffinityStore.set(sessionId, {
@@ -141,8 +144,17 @@ function evaluateCandidateModel(
   jev: JevEvaluation,
   strategy: 'cost_optimized' | 'performance_optimized' | 'balanced',
   catalog: CatalogModel[]
-): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' } {
+): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free'; isSubscription?: boolean } {
+  // Query active subscriptions and available free tokens
+  const claudeSub = getSubscription('claude_subscription');
+  const codexSub = getSubscription('codex_subscription');
+  const geminiSub = getSubscription('gemini_free');
 
+  const claudeHealthy = Boolean(claudeSub?.enabled && claudeSub?.connected && (claudeSub?.quota_remaining_pct ?? 0) > 15);
+  const claudeConserving = Boolean(claudeSub?.enabled && claudeSub?.connected && (claudeSub?.quota_remaining_pct ?? 0) > 0 && (claudeSub?.quota_remaining_pct ?? 0) <= 15);
+  const claudeExhausted = Boolean(claudeSub?.enabled && claudeSub?.connected && (claudeSub?.quota_remaining_pct ?? 0) <= 0);
+
+  const codexHealthy = Boolean(codexSub?.enabled && codexSub?.connected && (codexSub?.quota_remaining_pct ?? 0) > 15);
 
   // 1. Dedicated Reasoning Tier (applying TypeSafe Consistency Noul Uncertainty Band 0.30 - 0.70)
   const isDefiniteReasoner = jev.needsReasoner >= 0.70;
@@ -155,6 +167,23 @@ function evaluateCandidateModel(
     (jev.complexityScore >= 4.6 && isReasoningIntent);
 
   if (requiresReasoningModel) {
+    if (claudeHealthy) {
+      return {
+        model: 'anthropic/claude-3.5-sonnet',
+        reason: `Jev detected reasoning requirement (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Utilized Claude Pro subscription free quota ($0.00 marginal cost, ${claudeSub!.quota_remaining_pct.toFixed(0)}% window quota remaining).`,
+        providerHint: 'acp_claude',
+        isSubscription: true
+      };
+    }
+    if (claudeConserving) {
+      return {
+        model: 'anthropic/claude-3.5-sonnet',
+        reason: `Jev detected frontier reasoning (score: ${jev.complexityScore}). Allocated critical Claude subscription quota (${claudeSub!.quota_remaining_pct.toFixed(0)}% remaining in window).`,
+        providerHint: 'acp_claude',
+        isSubscription: true
+      };
+    }
+
     if (catalog.length > 0) {
       const reasoners = catalog.filter(m => m.tier === 'frontier_reasoning');
       if (reasoners.length > 0) {
@@ -163,7 +192,7 @@ function evaluateCandidateModel(
           const best = reasoners.find(m => m.id.includes('r1') || m.id.includes('deepseek')) || reasoners[0];
           return {
             model: best.id,
-            reason: `Jev detected reasoning requirement (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Selected '${best.name}' from catalog (${best.provider}) at live rate $${(best.promptPrice * 1e6).toFixed(2)}/M in.`,
+            reason: `Jev detected reasoning requirement (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Selected '${best.name}' from catalog (${best.provider}) at live rate $${(best.promptPrice * 1e6).toFixed(2)}/M in.${claudeExhausted ? ' [Claude subscription quota exhausted]' : ''}`,
             providerHint: best.provider
           };
         } else {
@@ -184,6 +213,31 @@ function evaluateCandidateModel(
 
   // 2. High-End Coding & Complex Refactoring Tier
   if (jev.intent === 'coding_complex' || jev.complexityScore >= 3.6) {
+    if (claudeHealthy) {
+      return {
+        model: 'anthropic/claude-3.5-sonnet',
+        reason: `Jev classified complex coding (score: ${jev.complexityScore}, intent: ${jev.intent}). Utilized Claude Pro subscription free quota ($0.00 marginal cost, ${claudeSub!.quota_remaining_pct.toFixed(0)}% quota remaining).`,
+        providerHint: 'acp_claude',
+        isSubscription: true
+      };
+    }
+    if (claudeConserving) {
+      return {
+        model: 'anthropic/claude-3.5-sonnet',
+        reason: `Jev classified complex coding (score: ${jev.complexityScore}, intent: ${jev.intent}). Allocated critical Claude subscription quota (${claudeSub!.quota_remaining_pct.toFixed(0)}% remaining).`,
+        providerHint: 'acp_claude',
+        isSubscription: true
+      };
+    }
+    if (codexHealthy) {
+      return {
+        model: 'openai/gpt-4o',
+        reason: `Jev classified complex coding (score: ${jev.complexityScore}). Utilized ChatGPT Plus/Pro Codex subscription free quota ($0.00 marginal cost, ${codexSub!.quota_remaining_pct.toFixed(0)}% quota remaining).`,
+        providerHint: 'acp_codex',
+        isSubscription: true
+      };
+    }
+
     if (catalog.length > 0) {
       const coders = catalog.filter(m => m.tier === 'frontier_coding');
       if (coders.length > 0) {
@@ -203,6 +257,33 @@ function evaluateCandidateModel(
 
   // 3. Balanced Coding / Structured Extraction / Mid-tier
   if (jev.intent === 'coding_simple' || jev.intent === 'structured_extraction' || jev.complexityScore >= 2.6) {
+    if (claudeConserving) {
+      const resetTimeStr = claudeSub!.resets_at ? new Date(claudeSub!.resets_at).toLocaleTimeString() : 'window reset';
+      return {
+        model: 'openai/gpt-4o-mini',
+        reason: `Quota Conservation Mode: Conserving Claude subscription (${claudeSub!.quota_remaining_pct.toFixed(0)}% remaining, resets at ${resetTimeStr}) for high-complexity tasks. Routed standard task to low-cost GPT-4o-mini.`,
+        providerHint: 'mammouth'
+      };
+    }
+
+    if (claudeHealthy && (strategy !== 'cost_optimized' || claudeSub!.quota_remaining_pct > 30)) {
+      return {
+        model: 'anthropic/claude-3.5-sonnet',
+        reason: `Jev detected standard coding task. Utilized active Claude subscription ($0.00 marginal cost, ${claudeSub!.quota_remaining_pct.toFixed(0)}% window quota remaining).`,
+        providerHint: 'acp_claude',
+        isSubscription: true
+      };
+    }
+
+    if (codexHealthy) {
+      return {
+        model: 'openai/gpt-4o-mini',
+        reason: `Jev detected standard task. Utilized ChatGPT Plus/Pro Codex subscription ($0.00 marginal cost, ${codexSub!.quota_remaining_pct.toFixed(0)}% remaining).`,
+        providerHint: 'acp_codex',
+        isSubscription: true
+      };
+    }
+
     if (catalog.length > 0) {
       const balanced = catalog.filter(m => m.tier === 'balanced');
       if (balanced.length > 0) {
@@ -224,6 +305,14 @@ function evaluateCandidateModel(
   // When Jev is uncertain on either intent or complexity, avoid downgrading to ultra-cheap flash tier.
   const isUncertain = jev.intentConfidence < 0.60 || jev.complexityConfidence < 0.60;
   if (isUncertain) {
+    if (claudeHealthy) {
+      return {
+        model: 'anthropic/claude-3.5-sonnet',
+        reason: `Confidence-gated safeguard: Jev reported uncertainty (intent conf: ${(jev.intentConfidence * 100).toFixed(0)}%, complexity conf: ${(jev.complexityConfidence * 100).toFixed(0)}%). Elevating to Claude Pro subscription ($0.00 marginal cost).`,
+        providerHint: 'acp_claude',
+        isSubscription: true
+      };
+    }
     if (catalog.length > 0) {
       const safeguard = strategy === 'cost_optimized'
         ? (catalog.find(m => m.tier === 'balanced') || catalog.find(m => m.tier === 'frontier_coding'))
@@ -243,6 +332,15 @@ function evaluateCandidateModel(
   }
 
   // 4. Confident Low-complexity / Factual / Creative / Greetings
+  if (geminiSub?.enabled && geminiSub?.connected) {
+    return {
+      model: 'google/gemini-2.5-flash',
+      reason: `Jev detected lightweight task (score: ${jev.complexityScore}). Routed to Gemini 2.5 Flash via free tier quota ($0.00 marginal cost).`,
+      providerHint: 'gemini_free',
+      isSubscription: true
+    };
+  }
+
   if (catalog.length > 0) {
     const cheap = catalog.filter(m => m.tier === 'fast_cheap');
     if (cheap.length > 0) {
@@ -261,6 +359,22 @@ function evaluateCandidateModel(
   };
 }
 
+export function getSubscriptionProviderForModel(model: string): 'claude_subscription' | 'codex_subscription' | 'gemini_free' | null {
+  const m = model.toLowerCase();
+  if (m.startsWith('anthropic/') || m.includes('claude')) {
+    const sub = getSubscription('claude_subscription');
+    if (sub && sub.enabled && sub.connected && sub.quota_remaining_pct > 0) {
+      return 'claude_subscription';
+    }
+  }
+  if (m.startsWith('openai/') || m.includes('gpt-') || m.includes('codex') || m.includes('o1') || m.includes('o3')) {
+    const sub = getSubscription('codex_subscription');
+    if (sub && sub.enabled && sub.connected && sub.quota_remaining_pct > 0) {
+      return 'codex_subscription';
+    }
+  }
+  return null;
+}
 
 export function getDirectVendorIfConfigured(model: string): 'anthropic' | 'openai' | 'mistral' | 'deepseek' | 'google' | null {
   const m = model.toLowerCase();
@@ -300,17 +414,38 @@ export async function executeRoutedCompletion(
   selectedModel: string;
   selectedProvider: string;
   routingReason: string;
+  isSubscription?: boolean;
 }> {
   const strategy = (getSetting('ROUTING_STRATEGY', config.routingStrategy) as any) || 'cost_optimized';
   const defaultProvider = (getSetting('DEFAULT_PROVIDER', config.defaultProvider) as any) || 'mammouth';
 
-  // 1. Jev decides the best model across the catalog (with break-even session cache affinity)
-  const { model, reason, providerHint } = selectOptimalModel(body.model, jev, strategy, sessionId, contextTokens);
+  // 1. Jev decides the best model across the catalog & subscriptions
+  const { model, reason, providerHint, isSubscription } = selectOptimalModel(body.model, jev, strategy, sessionId, contextTokens);
 
-  // 2. Check Credential-Aware Direct Dispatch:
+  // 2. Check Subscription / ACP Dispatch:
+  // If model is served by an active subscription with quota, dispatch via ACP bridge
+  const subVendor = getSubscriptionProviderForModel(model);
+  const modifiedBody = { ...body, model };
+
+  if (subVendor) {
+    const acpRes = await callAcpBridge(subVendor, modifiedBody, stream);
+    if (acpRes.ok) {
+      console.log(`⚡ [Prompt-Router] Success: Routed prompt to model '${model}' via SUBSCRIPTION (${subVendor}) ($0.00 marginal cost)`);
+      return {
+        providerResponse: acpRes,
+        selectedModel: model,
+        selectedProvider: subVendor,
+        routingReason: reason + ` [Subscription ACP free quota ($0.00)]`,
+        isSubscription: true
+      };
+    } else {
+      console.warn(`[Router] Subscription ACP dispatch for ${subVendor} failed (${acpRes.error}). Falling back to direct API / aggregator...`);
+    }
+  }
+
+  // 3. Check Credential-Aware Direct Dispatch:
   // If user configured direct credentials for this model's vendor, route direct to avoid aggregator markup/latency
   const directVendor = getDirectVendorIfConfigured(model);
-  const modifiedBody = { ...body, model };
 
   if (directVendor) {
     const directRes = directVendor === 'anthropic'

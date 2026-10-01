@@ -7,7 +7,7 @@ import { logRequest } from '../db.js';
 import { broadcastTelemetry } from '../telemetry.js';
 import { getFormattedMetrics } from './api.js';
 
-function recordAndBroadcastRequest(entry: any) {
+export function recordAndBroadcastRequest(entry: any) {
   logRequest(entry);
   try {
     broadcastTelemetry('request_completed', {
@@ -80,7 +80,7 @@ export async function handleChatCompletions(req: Request, res: Response) {
   const jev = await evaluateWithJev(req.body.messages || []);
 
   // 2. Select optimal model & target provider (with Session Cache Affinity)
-  const { providerResponse, selectedModel, selectedProvider, routingReason } =
+  const { providerResponse, selectedModel, selectedProvider, routingReason, isSubscription } =
     await executeRoutedCompletion(req.body, jev, isStream, sessionId, contextTokens);
 
   // If both providers are unconfigured / failed
@@ -159,7 +159,7 @@ export async function handleChatCompletions(req: Request, res: Response) {
     }
 
     const durationMs = Date.now() - startTime;
-    const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens);
+    const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens, isSubscription);
 
     recordAndBroadcastRequest({
       id: requestId,
@@ -181,7 +181,9 @@ export async function handleChatCompletions(req: Request, res: Response) {
       cost_if_claude: costs.costIfClaude,
       cost_if_gpt4o: costs.costIfGpt4o,
       savings_vs_claude: costs.savingsVsClaude,
-      prompt_preview: promptPreview
+      prompt_preview: promptPreview,
+      routing_reason: routingReason,
+      response_preview: ''
     });
 
     return;
@@ -192,7 +194,7 @@ export async function handleChatCompletions(req: Request, res: Response) {
   const promptTokens = completionData?.usage?.prompt_tokens || Math.ceil(stateText.length / 4);
   const completionTokens = completionData?.usage?.completion_tokens || 100;
   const durationMs = Date.now() - startTime;
-  const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens);
+  const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens, isSubscription);
 
   recordAndBroadcastRequest({
     id: requestId,
@@ -214,7 +216,9 @@ export async function handleChatCompletions(req: Request, res: Response) {
     cost_if_claude: costs.costIfClaude,
     cost_if_gpt4o: costs.costIfGpt4o,
     savings_vs_claude: costs.savingsVsClaude,
-    prompt_preview: promptPreview
+    prompt_preview: promptPreview,
+    routing_reason: routingReason,
+    response_preview: (completionData?.choices?.[0]?.message?.content || '').slice(0, 300)
   });
 
   return res.json(completionData);
@@ -265,7 +269,9 @@ function handleUnconfiguredMockStream(
     cost_if_claude: costs.costIfClaude,
     cost_if_gpt4o: costs.costIfGpt4o,
     savings_vs_claude: costs.savingsVsClaude,
-    prompt_preview: promptPreview
+    prompt_preview: promptPreview,
+    routing_reason: `Jev evaluated intent '${jev.intent}' (complexity: ${jev.complexityScore}/5.0). Optimal route selected: ${selectedModel} via ${selectedProvider}.`,
+    response_preview: content.slice(0, 300)
   });
 
   if (isStream) {

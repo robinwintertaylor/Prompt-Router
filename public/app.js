@@ -15,6 +15,7 @@ function initApp() {
   fetchSettings();
   fetchCatalog();
   fetchArbitrageStatus();
+  fetchSubscriptions();
 
   // Polling every 6 seconds as background fallback for live optics
   setInterval(() => {
@@ -22,6 +23,7 @@ function initApp() {
       fetchMetrics();
       fetchLogs();
       fetchArbitrageStatus();
+      fetchSubscriptions();
     }
   }, 6000);
 
@@ -30,7 +32,9 @@ function initApp() {
     fetchMetrics();
     fetchLogs();
     fetchCatalog();
+    fetchSubscriptions();
   });
+  document.getElementById('btn-sync-subs')?.addEventListener('click', triggerSyncSubscriptions);
 
   document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
   document.getElementById('btn-close-settings').addEventListener('click', closeSettingsModal);
@@ -48,14 +52,39 @@ function initApp() {
 
   document.getElementById('btn-run-test').addEventListener('click', runPromptTest);
 
-  // Playground preset chips
-  document.querySelectorAll('.btn-chip').forEach(btn => {
+  // Playground preset chips (populate textarea and mark active; does not auto-send)
+  const presetChips = document.querySelectorAll('.btn-chip');
+  const promptInput = document.getElementById('test-prompt-input');
+
+  presetChips.forEach(btn => {
     btn.addEventListener('click', (e) => {
-      const prompt = e.target.getAttribute('data-prompt');
-      document.getElementById('test-prompt-input').value = prompt;
-      runPromptTest();
+      const prompt = e.currentTarget.getAttribute('data-prompt');
+      if (promptInput) {
+        promptInput.value = prompt;
+        promptInput.focus();
+      }
+      presetChips.forEach(c => c.classList.remove('active'));
+      e.currentTarget.classList.add('active');
     });
   });
+
+  if (promptInput) {
+    promptInput.addEventListener('input', () => {
+      const currentVal = promptInput.value.trim();
+      presetChips.forEach(c => {
+        if (c.getAttribute('data-prompt') !== currentVal) {
+          c.classList.remove('active');
+        }
+      });
+    });
+
+    promptInput.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        runPromptTest();
+      }
+    });
+  }
 
   // Sub-toolbar Quick Tabs
   document.getElementById('tab-metrics')?.addEventListener('click', () => {
@@ -411,6 +440,136 @@ function renderMetrics(data) {
 
   // Render model distribution
   renderModelDistribution(data.modelBreakdown);
+
+  // Render subscriptions
+  if (data.subscriptions) {
+    renderSubscriptions(data.subscriptions);
+  }
+}
+
+function renderSubscriptions(subs) {
+  const container = document.getElementById('subscriptions-container');
+  if (!container) return;
+  if (!subs || subs.length === 0) {
+    container.innerHTML = '<div class="empty-state">No subscription bridges configured.</div>';
+    return;
+  }
+
+  const badgeConnected = document.getElementById('badge-subs-connected');
+  const connectedCount = subs.filter(s => s.enabled && s.connected).length;
+  if (badgeConnected) {
+    badgeConnected.textContent = `${connectedCount} ACTIVE / ${subs.length} BRIDGES`;
+    badgeConnected.className = connectedCount > 0 ? 'badge badge-savings' : 'badge badge-warning';
+  }
+
+  let html = '';
+  for (const s of subs) {
+    const isConnected = s.enabled && s.connected;
+    const quotaPct = Math.max(0, Math.min(100, Number(s.quota_remaining_pct || 100)));
+    
+    let statusBadge = '';
+    let barColor = '#10B981';
+    if (!s.enabled) {
+      statusBadge = '<span class="badge badge-warning">DISABLED</span>';
+      barColor = 'var(--text-muted)';
+    } else if (!s.connected) {
+      statusBadge = '<span class="badge badge-warning">NOT DETECTED</span>';
+      barColor = 'var(--text-muted)';
+    } else if (quotaPct <= 0) {
+      statusBadge = '<span class="badge badge-arbitrage-alert">QUOTA EXHAUSTED</span>';
+      barColor = '#EF4444';
+    } else if (quotaPct <= 15) {
+      statusBadge = '<span class="badge badge-warning">CONSERVING (&lt;15%)</span>';
+      barColor = '#F59E0B';
+    } else {
+      statusBadge = '<span class="badge badge-savings">ACTIVE ($0.00/TOK)</span>';
+      barColor = '#10B981';
+    }
+
+    let resetTimeText = 'Rolling window active';
+    if (s.resets_at) {
+      const diffMs = s.resets_at - Date.now();
+      if (diffMs > 0) {
+        const hours = Math.floor(diffMs / (60 * 60 * 1000));
+        const mins = Math.floor((diffMs % (60 * 60 * 1000)) / (60 * 1000));
+        resetTimeText = `Resets in ${hours > 0 ? hours + 'h ' : ''}${mins}m`;
+      } else {
+        resetTimeText = 'Refreshed';
+      }
+    }
+
+    const providerIcon = s.provider === 'anthropic' ? '🧠' : (s.provider === 'openai' ? '🤖' : '✨');
+
+    html += `
+      <div style="background: var(--card-bg, #0B1118); border: 1px solid var(--card-border, #162638); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px;">
+            <div style="font-weight: 700; font-size: 13px; color: var(--text-heading, #E2E8F0); display: flex; align-items: center; gap: 6px;">
+              <span>${providerIcon}</span> <span>${escapeHtml(s.name)}</span>
+            </div>
+            ${statusBadge}
+          </div>
+          
+          <div style="margin: 10px 0 6px 0;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; font-family: var(--font-mono);">
+              <span style="color: var(--text-muted);">Remaining Free Quota</span>
+              <strong style="color: ${barColor};">${quotaPct.toFixed(0)}%</strong>
+            </div>
+            <div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden;">
+              <div style="height: 100%; width: ${quotaPct}%; background: ${barColor}; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 6px;">
+            <span>${Number(s.quota_used_tokens || 0).toLocaleString()} / ${Number(s.quota_total_tokens || 0).toLocaleString()} toks</span>
+            <span>${resetTimeText}</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); font-size: 11px; color: var(--text-muted); line-height: 1.3;">
+          ${escapeHtml(s.status_message || '')}
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
+async function fetchSubscriptions() {
+  try {
+    const res = await fetch('/api/subscriptions');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.subscriptions) {
+      renderSubscriptions(data.subscriptions);
+    }
+  } catch (err) {
+    console.warn('[Subscriptions] Failed to fetch:', err);
+  }
+}
+
+async function triggerSyncSubscriptions() {
+  const btn = document.getElementById('btn-sync-subs');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '🔄 Probing CLI & Sessions...';
+  }
+  try {
+    const res = await fetch('/api/subscriptions/sync', { method: 'POST' });
+    if (!res.ok) throw new Error('Sync failed');
+    const data = await res.json();
+    if (data.subscriptions) {
+      renderSubscriptions(data.subscriptions);
+    }
+  } catch (err) {
+    alert('Failed to probe subscriptions: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🔄 Probe &amp; Refresh Quotas';
+    }
+  }
 }
 
 function renderModelDistribution(breakdown) {
@@ -537,18 +696,94 @@ function getIntentBadge(intent) {
 }
 
 
+let routeTestTimer = null;
+let routeStepTimeouts = [];
+
+function clearRouteTimers() {
+  if (routeTestTimer) {
+    clearInterval(routeTestTimer);
+    routeTestTimer = null;
+  }
+  if (routeStepTimeouts && routeStepTimeouts.length > 0) {
+    routeStepTimeouts.forEach(t => clearTimeout(t));
+    routeStepTimeouts = [];
+  }
+}
+
 async function runPromptTest() {
   const input = document.getElementById('test-prompt-input');
-  const prompt = input.value.trim();
-  if (!prompt) return;
-
-  const btn = document.getElementById('btn-run-test');
-  btn.disabled = true;
-  btn.innerHTML = '⚡ Intercepting with Jev...';
-
+  const prompt = input ? input.value.trim() : '';
   const panel = document.getElementById('test-result-panel');
-  panel.classList.remove('hidden');
-  panel.innerHTML = '<div class="empty-state">Executing The Parallel Junction: Jev System One non-autoregressive 120ms pass &amp; dynamic aggregator dispatch...</div>';
+  const btn = document.getElementById('btn-run-test');
+
+  if (!prompt) {
+    if (input) input.focus();
+    if (panel) {
+      panel.classList.remove('hidden');
+      panel.innerHTML = `
+        <div class="sim-validation-notice">
+          <span>⚠️ <strong>Prompt required:</strong> Please type a prompt or choose one of the presets above, then click <strong>⚡ Intercept &amp; Route with Jev</strong>.</span>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  clearRouteTimers();
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span> Routing Prompt...';
+  }
+
+  if (panel) {
+    panel.classList.remove('hidden');
+    panel.innerHTML = `
+      <div class="route-loading-card">
+        <div class="route-loading-header">
+          <div class="route-loading-title">
+            <span class="status-dot-pulse"></span>
+            <span>Routing your prompt with Jev...</span>
+          </div>
+          <span class="route-timer-badge" id="route-loading-timer">⏱️ 0.0s</span>
+        </div>
+        <div class="route-progress-track">
+          <div class="route-progress-bar"></div>
+        </div>
+        <div class="route-loading-status" id="route-loading-status">
+          ⚡ Jev System One intercepting &amp; analyzing intent...
+        </div>
+        <div class="route-loading-hint">
+          Sub-120ms non-autoregressive complexity assessment &amp; optimal aggregator dispatch in progress.
+        </div>
+      </div>
+    `;
+  }
+
+  const startTime = Date.now();
+  routeTestTimer = setInterval(() => {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    const timerEl = document.getElementById('route-loading-timer');
+    if (timerEl) {
+      timerEl.textContent = `⏱️ ${elapsed}s`;
+    }
+  }, 100);
+
+  const statusProgression = [
+    { delay: 350, text: '🎯 Checking real-time rates across Mammouth AI &amp; OpenRouter...' },
+    { delay: 1100, text: '📡 Dispatching to optimal aggregator and streaming completion...' },
+    { delay: 3200, text: '⏳ Awaiting upstream model completion stream &amp; token telemetry...' }
+  ];
+
+  statusProgression.forEach(step => {
+    const t = setTimeout(() => {
+      const statusEl = document.getElementById('route-loading-status');
+      if (statusEl && btn && btn.disabled) {
+        statusEl.innerHTML = step.text;
+      }
+    }, step.delay);
+    routeStepTimeouts.push(t);
+  });
 
   try {
     const res = await fetch('/api/test-route', {
@@ -558,6 +793,12 @@ async function runPromptTest() {
     });
 
     const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+
+    clearRouteTimers();
+
     const j = data.jev || {};
     const c = data.costs || {};
     const providerName = data.selectedProvider === 'openrouter' ? 'OpenRouter' : 'Mammouth AI';
@@ -616,10 +857,21 @@ async function runPromptTest() {
     fetchMetrics();
     fetchLogs();
   } catch (err) {
-    panel.innerHTML = `<div style="color: #D32F2F; padding: 12px;">Error evaluating route: ${escapeHtml(err.message)}</div>`;
+    clearRouteTimers();
+    panel.innerHTML = `
+      <div class="sim-error-card">
+        <div style="font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+          <span>⚠️</span> Error Evaluating Route
+        </div>
+        <div style="font-size: 12.5px;">${escapeHtml(err.message)}</div>
+      </div>
+    `;
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '⚡ Intercept &amp; Route with Jev';
+    clearRouteTimers();
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '⚡ Intercept &amp; Route with Jev';
+    }
   }
 }
 
@@ -639,6 +891,20 @@ async function fetchSettings() {
     if (data.geminiKeyMasked) document.getElementById('input-gemini-key').placeholder = data.geminiKeyMasked;
     if (data.routingStrategy) document.getElementById('select-strategy').value = data.routingStrategy;
     if (data.defaultProvider) document.getElementById('select-provider').value = data.defaultProvider;
+
+    // Fetch subscription toggle states
+    const subsRes = await fetch('/api/subscriptions');
+    if (subsRes.ok) {
+      const subsData = await subsRes.json();
+      const claude = subsData.subscriptions?.find(s => s.id === 'claude_subscription');
+      const codex = subsData.subscriptions?.find(s => s.id === 'codex_subscription');
+      if (claude && document.getElementById('select-sub-claude')) {
+        document.getElementById('select-sub-claude').value = claude.enabled ? 'enabled' : 'disabled';
+      }
+      if (codex && document.getElementById('select-sub-codex')) {
+        document.getElementById('select-sub-codex').value = codex.enabled ? 'enabled' : 'disabled';
+      }
+    }
   } catch (err) {
     console.error('Error fetching settings:', err);
   }
@@ -665,6 +931,8 @@ async function saveSettings() {
   const geminiApiKey = document.getElementById('input-gemini-key').value;
   const routingStrategy = document.getElementById('select-strategy').value;
   const defaultProvider = document.getElementById('select-provider').value;
+  const subClaudeVal = document.getElementById('select-sub-claude')?.value;
+  const subCodexVal = document.getElementById('select-sub-codex')?.value;
 
   const payload = { routingStrategy, defaultProvider };
   if (typesafeApiKey) payload.typesafeApiKey = typesafeApiKey;
@@ -682,9 +950,26 @@ async function saveSettings() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+
+    if (subClaudeVal) {
+      await fetch('/api/subscriptions/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'claude_subscription', enabled: subClaudeVal === 'enabled' })
+      });
+    }
+    if (subCodexVal) {
+      await fetch('/api/subscriptions/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'codex_subscription', enabled: subCodexVal === 'enabled' })
+      });
+    }
+
     if (res.ok) {
       closeSettingsModal();
       fetchSettings();
+      fetchSubscriptions();
       alert('Settings saved successfully!');
     }
   } catch (err) {
