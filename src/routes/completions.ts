@@ -80,7 +80,7 @@ export async function handleChatCompletions(req: Request, res: Response) {
   const jev = await evaluateWithJev(req.body.messages || []);
 
   // 2. Select optimal model & target provider (with Session Cache Affinity)
-  const { providerResponse, selectedModel, selectedProvider, routingReason } =
+  const { providerResponse, selectedModel, selectedProvider, routingReason, isSubscription } =
     await executeRoutedCompletion(req.body, jev, isStream, sessionId, contextTokens);
 
   // If both providers are unconfigured / failed
@@ -159,7 +159,7 @@ export async function handleChatCompletions(req: Request, res: Response) {
     }
 
     const durationMs = Date.now() - startTime;
-    const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens);
+    const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens, isSubscription);
 
     recordAndBroadcastRequest({
       id: requestId,
@@ -194,7 +194,7 @@ export async function handleChatCompletions(req: Request, res: Response) {
   const promptTokens = completionData?.usage?.prompt_tokens || Math.ceil(stateText.length / 4);
   const completionTokens = completionData?.usage?.completion_tokens || 100;
   const durationMs = Date.now() - startTime;
-  const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens);
+  const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens, isSubscription);
 
   recordAndBroadcastRequest({
     id: requestId,

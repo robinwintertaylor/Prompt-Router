@@ -9,6 +9,7 @@ import { getAllCatalogModels, syncCatalog } from '../catalog.js';
 import { addTelemetryClient, removeTelemetryClient } from '../telemetry.js';
 import { getArbitrageStatus } from '../arbitrage.js';
 import { recordAndBroadcastRequest } from './completions.js';
+import { getAllSubscriptions, getSubscription, updateSubscription, probeSubscriptionCredentials } from '../subscriptions.js';
 
 export function getFormattedMetrics() {
   const data = getMetrics();
@@ -44,7 +45,8 @@ export function getFormattedMetrics() {
     },
     modelBreakdown: data.modelBreakdown,
     intentBreakdown: data.intentBreakdown,
-    clientBreakdown: data.clientBreakdown
+    clientBreakdown: data.clientBreakdown,
+    subscriptions: getAllSubscriptions()
   };
 }
 
@@ -121,7 +123,7 @@ export async function handleTestRoute(req: Request, res: Response) {
     const jev = await evaluateWithJev(messages);
 
     // 2. Execute routed completion using Jev's evaluation across aggregators
-    const { providerResponse, selectedModel, selectedProvider, routingReason } =
+    const { providerResponse, selectedModel, selectedProvider, routingReason, isSubscription } =
       await executeRoutedCompletion({ model: 'auto', messages, max_tokens: 1024 }, jev, false);
 
     let responseContent = '';
@@ -138,7 +140,7 @@ export async function handleTestRoute(req: Request, res: Response) {
       responseContent = providerResponse.error || 'No response returned from aggregator';
     }
 
-    const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens);
+    const costs = calculateCosts(selectedModel, promptTokens, completionTokens, jev.jevInputTokens, isSubscription);
 
     const reqId = 'sim-' + crypto.randomUUID().slice(0, 8);
     const durationMs = (jev.jevDurationMs || 120) + 160;
@@ -402,4 +404,43 @@ export async function handleSyncCatalog(req: Request, res: Response) {
     res.status(500).json({ success: false, error: err.message });
   }
 }
+export function handleGetSubscriptions(req: Request, res: Response) {
+  try {
+    const subscriptions = getAllSubscriptions();
+    res.json({ subscriptions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export function handleUpdateSubscription(req: Request, res: Response) {
+  try {
+    const { id, enabled, connected, cli_path, session_token, quota_remaining_pct, resets_at } = req.body;
+    if (!id) return res.status(400).json({ error: 'Subscription ID is required' });
+
+    updateSubscription(id, {
+      ...(enabled !== undefined ? { enabled: Boolean(enabled) } : {}),
+      ...(connected !== undefined ? { connected: Boolean(connected) } : {}),
+      ...(cli_path !== undefined ? { cli_path: String(cli_path).trim() } : {}),
+      ...(session_token !== undefined ? { session_token: String(session_token).trim() } : {}),
+      ...(quota_remaining_pct !== undefined ? { quota_remaining_pct: Number(quota_remaining_pct) } : {}),
+      ...(resets_at !== undefined ? { resets_at: Number(resets_at) } : {})
+    });
+
+    res.json({ success: true, subscription: getSubscription(id) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export function handleSyncSubscriptions(req: Request, res: Response) {
+  try {
+    const probe = probeSubscriptionCredentials();
+    const subscriptions = getAllSubscriptions();
+    res.json({ success: true, probe, subscriptions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 

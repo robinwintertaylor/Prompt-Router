@@ -65,6 +65,24 @@ export function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_catalog_tier ON models_catalog(tier);
     CREATE INDEX IF NOT EXISTS idx_catalog_provider ON models_catalog(provider);
+
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      provider TEXT,
+      name TEXT,
+      enabled BOOLEAN DEFAULT 1,
+      connected BOOLEAN DEFAULT 0,
+      auth_type TEXT,
+      cli_path TEXT,
+      session_token TEXT,
+      window_type TEXT,
+      quota_total_tokens INTEGER DEFAULT 0,
+      quota_used_tokens INTEGER DEFAULT 0,
+      quota_remaining_pct REAL DEFAULT 100.0,
+      resets_at INTEGER,
+      last_checked INTEGER,
+      status_message TEXT
+    );
   `);
 
   // Safe incremental schema migrations

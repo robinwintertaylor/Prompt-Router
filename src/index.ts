@@ -18,14 +18,20 @@ import {
   handleTelemetryStream,
   handleGetArbitrage,
   handleGetReports,
-  handleGetLogDetail
+  handleGetLogDetail,
+  handleGetSubscriptions,
+  handleUpdateSubscription,
+  handleSyncSubscriptions
 } from './routes/api.js';
+import { initSubscriptionsTable, probeSubscriptionCredentials } from './subscriptions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize DB schema
+// Initialize DB schema & Subscriptions Table
 initDatabase();
+initSubscriptionsTable();
+probeSubscriptionCredentials();
 // Process crash guards
 process.on('uncaughtException', (err) => {
   console.error('🚨 [Server Error] Uncaught Exception:', err);
@@ -85,6 +91,9 @@ app.get('/api/settings', handleGetSettings);
 app.post('/api/settings', handleUpdateSettings);
 app.get('/api/catalog', handleGetCatalog);
 app.post('/api/catalog/sync', handleSyncCatalog);
+app.get('/api/subscriptions', handleGetSubscriptions);
+app.post('/api/subscriptions/update', handleUpdateSubscription);
+app.post('/api/subscriptions/sync', handleSyncSubscriptions);
 
 // Detailed Reporting Page
 app.get(['/reports', '/reporting'], (req, res) => {

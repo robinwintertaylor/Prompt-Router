@@ -78,23 +78,29 @@ export function calculateCosts(
   modelName: string,
   promptTokens: number,
   completionTokens: number,
-  jevInputTokens: number = 0
+  jevInputTokens: number = 0,
+  isSubscription: boolean = false
 ): CostCalculation {
   // 1. Calculate Jev cost ($0.042 / 1M input tokens, free output)
   const jevCost = (jevInputTokens / 1_000_000) * 0.042;
 
   // 2. Check live catalog for the model
-  const catalogEntry = getCatalogModel(modelName) || getCatalogModel(normalizeModelName(modelName));
   let modelCost = 0;
 
-  if (catalogEntry && (catalogEntry.promptPrice > 0 || catalogEntry.completionPrice > 0)) {
-    // Exact live aggregator rates per token
-    modelCost = (promptTokens * catalogEntry.promptPrice) + (completionTokens * catalogEntry.completionPrice);
+  if (isSubscription) {
+    // Model is fulfilled via user subscription / free package quota ($0.00 marginal cost)
+    modelCost = 0.0;
   } else {
-    // Fallback table per million
-    const norm = normalizeModelName(modelName);
-    const fallback = FALLBACK_MODEL_PRICES[norm] || { inputPerMillion: 1.0, outputPerMillion: 3.0, displayName: modelName };
-    modelCost = (promptTokens / 1_000_000) * fallback.inputPerMillion + (completionTokens / 1_000_000) * fallback.outputPerMillion;
+    const catalogEntry = getCatalogModel(modelName) || getCatalogModel(normalizeModelName(modelName));
+    if (catalogEntry && (catalogEntry.promptPrice > 0 || catalogEntry.completionPrice > 0)) {
+      // Exact live aggregator rates per token
+      modelCost = (promptTokens * catalogEntry.promptPrice) + (completionTokens * catalogEntry.completionPrice);
+    } else {
+      // Fallback table per million
+      const norm = normalizeModelName(modelName);
+      const fallback = FALLBACK_MODEL_PRICES[norm] || { inputPerMillion: 1.0, outputPerMillion: 3.0, displayName: modelName };
+      modelCost = (promptTokens / 1_000_000) * fallback.inputPerMillion + (completionTokens / 1_000_000) * fallback.outputPerMillion;
+    }
   }
 
   const totalActualCost = jevCost + modelCost;
