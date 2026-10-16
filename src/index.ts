@@ -31,7 +31,7 @@ const __dirname = path.dirname(__filename);
 // Initialize DB schema & Subscriptions Table
 initDatabase();
 initSubscriptionsTable();
-probeSubscriptionCredentials();
+probeSubscriptionCredentials().catch(err => console.warn('[Subscriptions] Initial probe notice:', err.message));
 // Process crash guards
 process.on('uncaughtException', (err) => {
   console.error('🚨 [Server Error] Uncaught Exception:', err);

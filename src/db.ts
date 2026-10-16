@@ -81,13 +81,19 @@ export function initDatabase() {
       quota_remaining_pct REAL DEFAULT 100.0,
       resets_at INTEGER,
       last_checked INTEGER,
-      status_message TEXT
+      status_message TEXT,
+      quota_unit TEXT DEFAULT 'tokens',
+      current_balance REAL DEFAULT 0.0,
+      max_balance REAL DEFAULT 0.0
     );
   `);
 
   // Safe incremental schema migrations
   try { db.exec('ALTER TABLE requests_log ADD COLUMN routing_reason TEXT;'); } catch (_) {}
   try { db.exec('ALTER TABLE requests_log ADD COLUMN response_preview TEXT;'); } catch (_) {}
+  try { db.exec("ALTER TABLE subscriptions ADD COLUMN quota_unit TEXT DEFAULT 'tokens';"); } catch (_) {}
+  try { db.exec("ALTER TABLE subscriptions ADD COLUMN current_balance REAL DEFAULT 0.0;"); } catch (_) {}
+  try { db.exec("ALTER TABLE subscriptions ADD COLUMN max_balance REAL DEFAULT 0.0;"); } catch (_) {}
 }
 
 export interface RequestLogEntry {

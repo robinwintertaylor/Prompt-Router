@@ -415,7 +415,7 @@ export function handleGetSubscriptions(req: Request, res: Response) {
 
 export function handleUpdateSubscription(req: Request, res: Response) {
   try {
-    const { id, enabled, connected, cli_path, session_token, quota_remaining_pct, resets_at } = req.body;
+    const { id, enabled, connected, cli_path, session_token, quota_remaining_pct, resets_at, window_type, status_message } = req.body;
     if (!id) return res.status(400).json({ error: 'Subscription ID is required' });
 
     updateSubscription(id, {
@@ -424,7 +424,9 @@ export function handleUpdateSubscription(req: Request, res: Response) {
       ...(cli_path !== undefined ? { cli_path: String(cli_path).trim() } : {}),
       ...(session_token !== undefined ? { session_token: String(session_token).trim() } : {}),
       ...(quota_remaining_pct !== undefined ? { quota_remaining_pct: Number(quota_remaining_pct) } : {}),
-      ...(resets_at !== undefined ? { resets_at: Number(resets_at) } : {})
+      ...(resets_at !== undefined ? { resets_at: Number(resets_at) } : {}),
+      ...(window_type !== undefined ? { window_type } : {}),
+      ...(status_message !== undefined ? { status_message: String(status_message) } : {})
     });
 
     res.json({ success: true, subscription: getSubscription(id) });
@@ -433,9 +435,9 @@ export function handleUpdateSubscription(req: Request, res: Response) {
   }
 }
 
-export function handleSyncSubscriptions(req: Request, res: Response) {
+export async function handleSyncSubscriptions(req: Request, res: Response) {
   try {
-    const probe = probeSubscriptionCredentials();
+    const probe = await probeSubscriptionCredentials();
     const subscriptions = getAllSubscriptions();
     res.json({ success: true, probe, subscriptions });
   } catch (err: any) {

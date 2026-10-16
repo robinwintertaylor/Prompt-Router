@@ -155,6 +155,7 @@ function evaluateCandidateModel(
   const claudeExhausted = Boolean(claudeSub?.enabled && claudeSub?.connected && (claudeSub?.quota_remaining_pct ?? 0) <= 0);
 
   const codexHealthy = Boolean(codexSub?.enabled && codexSub?.connected && (codexSub?.quota_remaining_pct ?? 0) > 15);
+  const geminiHealthy = Boolean(geminiSub?.enabled && geminiSub?.connected);
 
   // 1. Dedicated Reasoning Tier (applying TypeSafe Consistency Noul Uncertainty Band 0.30 - 0.70)
   const isDefiniteReasoner = jev.needsReasoner >= 0.70;
@@ -165,6 +166,34 @@ function evaluateCandidateModel(
     isDefiniteReasoner ||
     (isBorderlineReasoner && (isReasoningIntent || isHighComplexityAlgorithm)) ||
     (jev.complexityScore >= 4.6 && isReasoningIntent);
+
+  // Zero-Credit / Free Tier Mode: If all subscriptions are unavailable and all aggregator budgets/credits are expended
+  const allSubsExhausted = !claudeHealthy && !claudeConserving && !codexHealthy && !geminiHealthy;
+  const allCreditsExpended = isProviderBudgetExceeded('mammouth') && isProviderBudgetExceeded('openrouter');
+  if (allSubsExhausted && allCreditsExpended) {
+    if (requiresReasoningModel) {
+      return {
+        model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+        reason: `All paid credits exhausted. Jev detected reasoning task (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Routed to free reasoning model 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free' ($0.00 cost).`,
+        providerHint: 'openrouter',
+        isSubscription: true
+      };
+    }
+    if (jev.intent === 'coding_complex' || jev.complexityScore >= 3.6 || jev.intent === 'coding_simple') {
+      return {
+        model: 'cohere/north-mini-code:free',
+        reason: `All paid credits exhausted. Jev detected code task (score: ${jev.complexityScore}, intent: ${jev.intent}). Routed to free coding model 'cohere/north-mini-code:free' ($0.00 cost).`,
+        providerHint: 'openrouter',
+        isSubscription: true
+      };
+    }
+    return {
+      model: 'openrouter/free',
+      reason: `All subscription quotas and aggregator credits are currently expended. Switched to Zero-Credit Free Tier (openrouter/free) at $0.00 cost.`,
+      providerHint: 'openrouter',
+      isSubscription: true
+    };
+  }
 
   if (requiresReasoningModel) {
     if (claudeHealthy) {
@@ -552,7 +581,11 @@ export async function executeRoutedCompletion(
       res.error.includes('budget_exceeded') ||
       res.error.includes('ExceededBudget') ||
       res.error.includes('insufficient_quota') ||
-      res.error.includes('insufficient_credits')
+      res.error.includes('insufficient_credits') ||
+      res.error.includes('requires more credits') ||
+      res.error.includes('can only afford') ||
+      res.error.includes('openrouter_credits') ||
+      res.error.includes('out of credits')
     );
     if (isBudgetError) {
       markProviderBudgetExceeded(primaryProvider);
@@ -599,6 +632,23 @@ export async function executeRoutedCompletion(
           routingReason: reason + ` [Recovered via safeguard '${safeguardModel}']`
         };
       }
+    }
+  }
+
+  // 8. Zero-Credit Free Tier Fallback: When all account credits and budgets are exhausted,
+  // automatically route to OpenRouter's free tier model (openrouter/free) at $0.00 cost so developer agent sessions NEVER fail!
+  if (!res.ok && openrouterKey) {
+    console.warn(`⚡ [Prompt-Router] All aggregator credits exhausted. Attempting Zero-Credit Recovery with 'openrouter/free'...`);
+    const freeBody = { ...body, model: 'openrouter/free' };
+    const freeRes = await callOpenRouter(freeBody, stream);
+    if (freeRes.ok) {
+      console.log(`🎉 [Prompt-Router] Zero-Credit Recovery successful! Routed prompt to 'openrouter/free' via OpenRouter at $0.00 marginal cost.`);
+      return {
+        providerResponse: freeRes,
+        selectedModel: 'openrouter/free',
+        selectedProvider: 'openrouter',
+        routingReason: reason + ' [Zero-Credit Fallback: Routed to openrouter/free]'
+      };
     }
   }
 

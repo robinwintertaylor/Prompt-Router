@@ -78,7 +78,11 @@ export function recordProviderPerformance(
     errorMessage.includes('budget_exceeded') ||
     errorMessage.includes('ExceededBudget') ||
     errorMessage.includes('insufficient_quota') ||
-    errorMessage.includes('insufficient_credits')
+    errorMessage.includes('insufficient_credits') ||
+    errorMessage.includes('requires more credits') ||
+    errorMessage.includes('can only afford') ||
+    errorMessage.includes('openrouter_credits') ||
+    errorMessage.includes('out of credits')
   )) {
     markProviderBudgetExceeded(provider);
   } else if (success) {

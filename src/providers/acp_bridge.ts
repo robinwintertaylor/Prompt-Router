@@ -99,7 +99,7 @@ export async function callAcpBridge(
     if (subId === 'claude_subscription') {
       args.push('--print');
       if (systemMsg?.content) {
-        args.push('--system', typeof systemMsg.content === 'string' ? systemMsg.content : JSON.stringify(systemMsg.content));
+        args.push('--system-prompt', typeof systemMsg.content === 'string' ? systemMsg.content : JSON.stringify(systemMsg.content));
       }
       args.push(promptText);
     } else {
@@ -161,9 +161,19 @@ export async function callAcpBridge(
           lowerStderr.includes('rate limit') ||
           lowerStderr.includes('quota') ||
           lowerStderr.includes('too many requests') ||
-          lowerStdout.includes('you have reached your usage limit')
+          lowerStdout.includes('you have reached your usage limit') ||
+          lowerStderr.includes('weekly limit') ||
+          lowerStdout.includes('weekly limit') ||
+          lowerStderr.includes('allowance') ||
+          lowerStdout.includes('allowance')
         ) {
-          recordSubscriptionUsage(subId, promptTokens, 0, Date.now() + 5 * 60 * 60 * 1000);
+          let resetsAt = Date.now() + 5 * 60 * 60 * 1000;
+          const matchDate = (stderrBuffer + ' ' + stdoutBuffer).match(/(?:reset(?:s)?\s*(?:on|at)\s*)([A-Za-z]+\s+\d{1,2}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+|\d{1,2}:\d{2})/i);
+          if (matchDate) {
+            const parsed = Date.parse(matchDate[1] + ` ${new Date().getFullYear()}`);
+            if (!isNaN(parsed)) resetsAt = parsed;
+          }
+          recordSubscriptionUsage(subId, promptTokens, 0, resetsAt);
           return resolve({
             ok: false,
             status: 429,

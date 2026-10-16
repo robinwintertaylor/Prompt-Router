@@ -184,11 +184,11 @@
         </div>
       </div>
 
-      <!-- Section 1B: Subscriptions & Free Token Quotas (ACP / Free Tiers) -->
+      <!-- Section 1B: Subscriptions, Free Token Quotas & Aggregator Balances -->
       <div class="content-panel" style="margin-bottom: 24px;">
         <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <h3 class="panel-title">⚡ Subscriptions &amp; Free Token Quotas (ACP / Zero-Cost Tiers)</h3>
+            <h3 class="panel-title">⚡ Subscriptions, Free Quotas &amp; Aggregator Balances</h3>
             <span class="badge badge-arbitrage-ok" id="badge-subs-connected">PROBE: READY</span>
           </div>
           <button class="btn btn-secondary" id="btn-sync-subs" style="padding: 4px 12px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
@@ -196,7 +196,7 @@
           </button>
         </div>
         <p style="font-size: 12px; color: var(--text-muted); margin: 6px 0 14px 0;">
-          Jev prioritizes active subscription quotas ($0.00 marginal token cost) before falling back to pay-per-token API keys. When quota is low (&lt;15%), Jev enters <strong>Quota Conservation Mode</strong> to protect tokens for high-complexity code.
+          Jev monitors active ACP subscription free tokens ($0.00 marginal cost) and live prepaid credits across OpenRouter and Mammouth AI before routing prompts.
         </p>
         <div id="subscriptions-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
           <!-- Rendered dynamically by app.js -->
@@ -371,6 +371,19 @@
                 <option value="enabled">Enabled (Auto-probe local session)</option>
                 <option value="disabled">Disabled</option>
               </select>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="form-field">
+              <label>Claude Quota Remaining (%)</label>
+              <input type="number" id="input-sub-claude-quota" min="0" max="100" placeholder="e.g. 0 when exhausted">
+              <small>0% stops routing to Claude subscription until reset date.</small>
+            </div>
+            <div class="form-field">
+              <label>Claude Allowance Reset Date</label>
+              <input type="date" id="input-sub-claude-reset">
+              <small>Date when allowance unlocks (e.g. 2026-10-17).</small>
             </div>
           </div>
 

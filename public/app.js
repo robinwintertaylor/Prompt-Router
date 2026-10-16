@@ -458,14 +458,15 @@ function renderSubscriptions(subs) {
   const badgeConnected = document.getElementById('badge-subs-connected');
   const connectedCount = subs.filter(s => s.enabled && s.connected).length;
   if (badgeConnected) {
-    badgeConnected.textContent = `${connectedCount} ACTIVE / ${subs.length} BRIDGES`;
+    badgeConnected.textContent = `${connectedCount} ACTIVE / ${subs.length} PROVIDERS`;
     badgeConnected.className = connectedCount > 0 ? 'badge badge-savings' : 'badge badge-warning';
   }
 
   let html = '';
   for (const s of subs) {
     const isConnected = s.enabled && s.connected;
-    const quotaPct = Math.max(0, Math.min(100, Number(s.quota_remaining_pct || 100)));
+    const isDollar = s.quota_unit === 'usd' || s.provider === 'mammouth' || s.provider === 'openrouter';
+    const quotaPct = Math.max(0, Math.min(100, Number(s.quota_remaining_pct ?? 100)));
     
     let statusBadge = '';
     let barColor = '#10B981';
@@ -476,20 +477,26 @@ function renderSubscriptions(subs) {
       statusBadge = '<span class="badge badge-warning">NOT DETECTED</span>';
       barColor = 'var(--text-muted)';
     } else if (quotaPct <= 0) {
-      statusBadge = '<span class="badge badge-arbitrage-alert">QUOTA EXHAUSTED</span>';
+      statusBadge = `<span class="badge badge-arbitrage-alert">${isDollar ? 'CREDITS EXHAUSTED' : 'QUOTA EXHAUSTED'}</span>`;
       barColor = '#EF4444';
     } else if (quotaPct <= 15) {
-      statusBadge = '<span class="badge badge-warning">CONSERVING (&lt;15%)</span>';
+      statusBadge = `<span class="badge badge-warning">${isDollar ? 'LOW BALANCE (<15%)' : 'CONSERVING (<15%)'}</span>`;
       barColor = '#F59E0B';
+    } else if (isDollar) {
+      statusBadge = '<span class="badge badge-savings">ACTIVE CREDIT</span>';
+      barColor = '#10B981';
     } else {
       statusBadge = '<span class="badge badge-savings">ACTIVE ($0.00/TOK)</span>';
       barColor = '#10B981';
     }
 
-    let resetTimeText = 'Rolling window active';
+    let resetTimeText = isDollar ? 'Rolling balance' : 'Rolling window active';
     if (s.resets_at) {
       const diffMs = s.resets_at - Date.now();
-      if (diffMs > 0) {
+      if (diffMs > 24 * 60 * 60 * 1000) {
+        const days = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+        resetTimeText = `Resets ${new Date(s.resets_at).toLocaleDateString([], { month: 'short', day: 'numeric' })} (${days}d)`;
+      } else if (diffMs > 0) {
         const hours = Math.floor(diffMs / (60 * 60 * 1000));
         const mins = Math.floor((diffMs % (60 * 60 * 1000)) / (60 * 1000));
         resetTimeText = `Resets in ${hours > 0 ? hours + 'h ' : ''}${mins}m`;
@@ -498,7 +505,15 @@ function renderSubscriptions(subs) {
       }
     }
 
-    const providerIcon = s.provider === 'anthropic' ? '🧠' : (s.provider === 'openai' ? '🤖' : '✨');
+    const providerIcon = s.provider === 'anthropic' ? '🧠'
+      : (s.provider === 'openai' ? '🤖'
+      : (s.provider === 'google' ? '✨'
+      : (s.provider === 'mammouth' ? '🦣' : '🔀')));
+
+    const quotaLabel = isDollar ? 'Remaining Balance' : 'Remaining Free Quota';
+    const amountText = isDollar
+      ? `$${(Number(s.current_balance ?? 0)).toFixed(2)} / $${(Number(s.max_balance ?? 0)).toFixed(2)}`
+      : `${Number(s.quota_used_tokens || 0).toLocaleString()} / ${Number(s.quota_total_tokens || 0).toLocaleString()} toks`;
 
     html += `
       <div style="background: var(--card-bg, #0B1118); border: 1px solid var(--card-border, #162638); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
@@ -512,7 +527,7 @@ function renderSubscriptions(subs) {
           
           <div style="margin: 10px 0 6px 0;">
             <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; font-family: var(--font-mono);">
-              <span style="color: var(--text-muted);">Remaining Free Quota</span>
+              <span style="color: var(--text-muted);">${quotaLabel}</span>
               <strong style="color: ${barColor};">${quotaPct.toFixed(0)}%</strong>
             </div>
             <div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden;">
@@ -521,7 +536,7 @@ function renderSubscriptions(subs) {
           </div>
           
           <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 6px;">
-            <span>${Number(s.quota_used_tokens || 0).toLocaleString()} / ${Number(s.quota_total_tokens || 0).toLocaleString()} toks</span>
+            <span>${amountText}</span>
             <span>${resetTimeText}</span>
           </div>
         </div>
@@ -901,6 +916,13 @@ async function fetchSettings() {
       if (claude && document.getElementById('select-sub-claude')) {
         document.getElementById('select-sub-claude').value = claude.enabled ? 'enabled' : 'disabled';
       }
+      if (claude && document.getElementById('input-sub-claude-quota')) {
+        document.getElementById('input-sub-claude-quota').value = claude.quota_remaining_pct;
+      }
+      if (claude && claude.resets_at && document.getElementById('input-sub-claude-reset')) {
+        const d = new Date(claude.resets_at);
+        document.getElementById('input-sub-claude-reset').value = d.toISOString().split('T')[0];
+      }
       if (codex && document.getElementById('select-sub-codex')) {
         document.getElementById('select-sub-codex').value = codex.enabled ? 'enabled' : 'disabled';
       }
@@ -951,11 +973,26 @@ async function saveSettings() {
       body: JSON.stringify(payload)
     });
 
-    if (subClaudeVal) {
+    const claudeQuotaVal = document.getElementById('input-sub-claude-quota')?.value;
+    const claudeResetVal = document.getElementById('input-sub-claude-reset')?.value;
+    if (subClaudeVal !== undefined || (claudeQuotaVal !== '' && claudeQuotaVal !== undefined) || claudeResetVal) {
+      const claudePayload = { id: 'claude_subscription' };
+      if (subClaudeVal) claudePayload.enabled = subClaudeVal === 'enabled';
+      if (claudeQuotaVal !== '' && claudeQuotaVal !== undefined) {
+        claudePayload.quota_remaining_pct = Number(claudeQuotaVal);
+        if (Number(claudeQuotaVal) <= 0) {
+          claudePayload.quota_used_tokens = 180000;
+        }
+      }
+      if (claudeResetVal) {
+        claudePayload.resets_at = new Date(claudeResetVal + 'T00:00:00Z').getTime();
+        claudePayload.window_type = 'weekly';
+        claudePayload.status_message = `Weekly allowance exhausted. Resets on ${new Date(claudePayload.resets_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}.`;
+      }
       await fetch('/api/subscriptions/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 'claude_subscription', enabled: subClaudeVal === 'enabled' })
+        body: JSON.stringify(claudePayload)
       });
     }
     if (subCodexVal) {

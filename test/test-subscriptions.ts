@@ -21,16 +21,20 @@ async function runSubscriptionTests() {
 
   const subs = getAllSubscriptions();
   console.log(`• Subscriptions initialized: ${subs.length} active configurations`);
-  if (subs.length < 3) throw new Error('Expected at least 3 subscriptions');
+  if (subs.length < 5) throw new Error('Expected at least 5 subscriptions');
 
   const claude = getSubscription('claude_subscription');
   if (!claude) throw new Error('claude_subscription not found');
+  const initialClaude = { ...claude };
   console.log(`• Found ${claude.name}, initial quota: ${claude.quota_remaining_pct}%`);
 
   // 2. Test Environment Probe
-  console.log('\n--- 1. Testing Credential & CLI Probe ---');
-  const probe = probeSubscriptionCredentials();
+  console.log('\n--- 1. Testing Credential, Aggregator & CLI Probe ---');
+  const probe = await probeSubscriptionCredentials();
   console.log('• Probe results:', probe);
+  if (!probe.mammouth || !probe.openrouter) {
+    throw new Error('Expected mammouth and openrouter probes to be included');
+  }
   console.log('✅ Probe executed successfully.');
 
   // 3. Test Jev Routing with Active Claude Subscription (> 15% Quota)
@@ -39,7 +43,8 @@ async function runSubscriptionTests() {
     enabled: true,
     connected: true,
     quota_remaining_pct: 100.0,
-    quota_used_tokens: 0
+    quota_used_tokens: 0,
+    resets_at: null
   });
 
   const complexEval: JevEvaluation = {
@@ -147,6 +152,19 @@ async function runSubscriptionTests() {
     throw new Error('Expected expired quota window to reset back to 100% and 0 tokens used');
   }
   console.log('✅ Automatic Window Reset verified.');
+
+  // Restore initial subscription state
+  if (initialClaude) {
+    updateSubscription('claude_subscription', {
+      quota_remaining_pct: initialClaude.quota_remaining_pct,
+      quota_used_tokens: initialClaude.quota_used_tokens,
+      resets_at: initialClaude.resets_at,
+      status_message: initialClaude.status_message,
+      window_type: initialClaude.window_type,
+      connected: initialClaude.connected,
+      enabled: initialClaude.enabled
+    });
+  }
 
   console.log('\n🎉 ALL SUBSCRIPTION & FREE TOKEN ROUTING TESTS PASSED SUCCESSFULLY!\n');
 }

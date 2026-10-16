@@ -6,4 +6,5 @@ prompt_router.db-journal
 *.log
 *.db-shm
 *.db-wal
+.vscode/
 
