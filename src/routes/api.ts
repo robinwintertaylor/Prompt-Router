@@ -410,7 +410,8 @@ export async function handleSyncCatalog(req: Request, res: Response) {
 }
 export function handleGetSubscriptions(req: Request, res: Response) {
   try {
-    const subscriptions = getAllSubscriptions();
+    const connectedOnly = req.query.connected === 'true';
+    const subscriptions = getAllSubscriptions(connectedOnly);
     res.json({ subscriptions });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

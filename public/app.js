@@ -450,20 +450,23 @@ function renderMetrics(data) {
 function renderSubscriptions(subs) {
   const container = document.getElementById('subscriptions-container');
   if (!container) return;
-  if (!subs || subs.length === 0) {
-    container.innerHTML = '<div class="empty-state">No subscription bridges configured.</div>';
+
+  // Only show active and connected providers on the dashboard
+  const displaySubs = (subs || []).filter(s => s.enabled && s.connected);
+
+  const badgeConnected = document.getElementById('badge-subs-connected');
+  if (badgeConnected) {
+    badgeConnected.textContent = `${displaySubs.length} ACTIVE PROVIDER${displaySubs.length === 1 ? '' : 'S'}`;
+    badgeConnected.className = displaySubs.length > 0 ? 'badge badge-savings' : 'badge badge-warning';
+  }
+
+  if (displaySubs.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-muted);">No connected provider bridges detected. Configure API keys or local ACP CLI sessions in Settings to activate.</div>';
     return;
   }
 
-  const badgeConnected = document.getElementById('badge-subs-connected');
-  const connectedCount = subs.filter(s => s.enabled && s.connected).length;
-  if (badgeConnected) {
-    badgeConnected.textContent = `${connectedCount} ACTIVE / ${subs.length} PROVIDERS`;
-    badgeConnected.className = connectedCount > 0 ? 'badge badge-savings' : 'badge badge-warning';
-  }
-
   let html = '';
-  for (const s of subs) {
+  for (const s of displaySubs) {
     const isConnected = s.enabled && s.connected;
     const isDollar = s.quota_unit === 'usd' || s.provider === 'mammouth' || s.provider === 'openrouter';
     const isPayAsYouGo = s.window_type === 'pay_as_you_go' || s.quota_unit === 'pay_as_you_go';

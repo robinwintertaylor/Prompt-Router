@@ -390,7 +390,7 @@ export function recordProviderUsage(
   } catch (_) {}
 }
 
-export function getAllSubscriptions(): SubscriptionRecord[] {
+export function getAllSubscriptions(connectedOnly: boolean = false): SubscriptionRecord[] {
   resetExpiredSubscriptionQuotas();
   syncConfiguredProviderSubscriptions();
 
@@ -415,7 +415,7 @@ export function getAllSubscriptions(): SubscriptionRecord[] {
       END
   `).all() as any[];
 
-  return rows.map(r => {
+  let result = rows.map(r => {
     const isPayg = r.window_type === 'pay_as_you_go' || r.quota_unit === 'pay_as_you_go';
     const usage = getProviderUsageStats(r.provider);
     const usedTokens = isPayg ? usage.totalTokens : Number(r.quota_used_tokens);
@@ -433,6 +433,12 @@ export function getAllSubscriptions(): SubscriptionRecord[] {
       max_balance: Number(r.max_balance ?? 0)
     };
   });
+
+  if (connectedOnly) {
+    result = result.filter(s => s.enabled && s.connected);
+  }
+
+  return result;
 }
 
 export function getSubscription(id: string): SubscriptionRecord | null {
