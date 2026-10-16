@@ -9,7 +9,7 @@ import { getAllCatalogModels, syncCatalog } from '../catalog.js';
 import { addTelemetryClient, removeTelemetryClient } from '../telemetry.js';
 import { getArbitrageStatus } from '../arbitrage.js';
 import { recordAndBroadcastRequest } from './completions.js';
-import { getAllSubscriptions, getSubscription, updateSubscription, probeSubscriptionCredentials } from '../subscriptions.js';
+import { getAllSubscriptions, getSubscription, updateSubscription, probeSubscriptionCredentials, syncConfiguredProviderSubscriptions } from '../subscriptions.js';
 
 export function getFormattedMetrics() {
   const data = getMetrics();
@@ -359,6 +359,10 @@ export function handleUpdateSettings(req: Request, res: Response) {
   if (defaultProvider) {
     setSetting('DEFAULT_PROVIDER', defaultProvider);
   }
+
+  // Dynamically sync and probe configured provider subscriptions
+  syncConfiguredProviderSubscriptions();
+  probeSubscriptionCredentials().catch(err => console.warn('[Probe] Background probe warning:', err.message));
 
   res.json({ success: true, message: 'Settings updated successfully' });
 }

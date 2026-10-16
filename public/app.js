@@ -466,19 +466,29 @@ function renderSubscriptions(subs) {
   for (const s of subs) {
     const isConnected = s.enabled && s.connected;
     const isDollar = s.quota_unit === 'usd' || s.provider === 'mammouth' || s.provider === 'openrouter';
+    const isPayAsYouGo = s.window_type === 'pay_as_you_go' || s.quota_unit === 'pay_as_you_go';
     const quotaPct = Math.max(0, Math.min(100, Number(s.quota_remaining_pct ?? 100)));
     
     let statusBadge = '';
     let barColor = '#10B981';
+    let displayPct = quotaPct;
+
     if (!s.enabled) {
       statusBadge = '<span class="badge badge-warning">DISABLED</span>';
       barColor = 'var(--text-muted)';
+      displayPct = 0;
     } else if (!s.connected) {
       statusBadge = '<span class="badge badge-warning">NOT DETECTED</span>';
       barColor = 'var(--text-muted)';
+      displayPct = 0;
+    } else if (isPayAsYouGo) {
+      statusBadge = '<span class="badge badge-savings">DIRECT API (ACTIVE)</span>';
+      barColor = '#10B981';
+      displayPct = 100;
     } else if (quotaPct <= 0) {
       statusBadge = `<span class="badge badge-arbitrage-alert">${isDollar ? 'CREDITS EXHAUSTED' : 'QUOTA EXHAUSTED'}</span>`;
       barColor = '#EF4444';
+      displayPct = 0;
     } else if (quotaPct <= 15) {
       statusBadge = `<span class="badge badge-warning">${isDollar ? 'LOW BALANCE (<15%)' : 'CONSERVING (<15%)'}</span>`;
       barColor = '#F59E0B';
@@ -490,7 +500,7 @@ function renderSubscriptions(subs) {
       barColor = '#10B981';
     }
 
-    let resetTimeText = isDollar ? 'Rolling balance' : 'Rolling window active';
+    let resetTimeText = isPayAsYouGo ? 'Pay-as-you-go' : (isDollar ? 'Rolling balance' : 'Rolling window active');
     if (s.resets_at) {
       const diffMs = s.resets_at - Date.now();
       if (diffMs > 24 * 60 * 60 * 1000) {
@@ -508,12 +518,21 @@ function renderSubscriptions(subs) {
     const providerIcon = s.provider === 'anthropic' ? '🧠'
       : (s.provider === 'openai' ? '🤖'
       : (s.provider === 'google' ? '✨'
-      : (s.provider === 'mammouth' ? '🦣' : '🔀')));
+      : (s.provider === 'mistral' ? '🌪️'
+      : (s.provider === 'deepseek' ? '🐋'
+      : (s.provider === 'mammouth' ? '🦣' : '🔀')))));
 
-    const quotaLabel = isDollar ? 'Remaining Balance' : 'Remaining Free Quota';
-    const amountText = isDollar
-      ? `$${(Number(s.current_balance ?? 0)).toFixed(2)} / $${(Number(s.max_balance ?? 0)).toFixed(2)}`
-      : `${Number(s.quota_used_tokens || 0).toLocaleString()} / ${Number(s.quota_total_tokens || 0).toLocaleString()} toks`;
+    const quotaLabel = isPayAsYouGo ? 'Direct Routed Usage' : (isDollar ? 'Remaining Balance' : 'Remaining Free Quota');
+    let amountText = '';
+    if (isPayAsYouGo) {
+      amountText = isConnected
+        ? `${Number(s.quota_used_tokens || 0).toLocaleString()} toks ($${(Number(s.current_balance ?? 0)).toFixed(4)} spent)`
+        : 'Key not configured';
+    } else if (isDollar) {
+      amountText = `$${(Number(s.current_balance ?? 0)).toFixed(2)} / $${(Number(s.max_balance ?? 0)).toFixed(2)}`;
+    } else {
+      amountText = `${Number(s.quota_used_tokens || 0).toLocaleString()} / ${Number(s.quota_total_tokens || 0).toLocaleString()} toks`;
+    }
 
     html += `
       <div style="background: var(--card-bg, #0B1118); border: 1px solid var(--card-border, #162638); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
@@ -528,10 +547,10 @@ function renderSubscriptions(subs) {
           <div style="margin: 10px 0 6px 0;">
             <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; font-family: var(--font-mono);">
               <span style="color: var(--text-muted);">${quotaLabel}</span>
-              <strong style="color: ${barColor};">${quotaPct.toFixed(0)}%</strong>
+              <strong style="color: ${barColor};">${isPayAsYouGo && isConnected ? 'ACTIVE' : (displayPct.toFixed(0) + '%')}</strong>
             </div>
             <div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden;">
-              <div style="height: 100%; width: ${quotaPct}%; background: ${barColor}; transition: width 0.3s ease;"></div>
+              <div style="height: 100%; width: ${displayPct}%; background: ${barColor}; transition: width 0.3s ease;"></div>
             </div>
           </div>
           
@@ -602,7 +621,13 @@ function renderModelDistribution(breakdown) {
     const pct = Math.round((item.count / total) * 100);
     const providerBadge = item.provider_used === 'mammouth'
       ? '<span class="badge badge-savings">Mammouth</span>'
-      : '<span class="badge badge-gateway">OpenRouter</span>';
+      : (item.provider_used === 'openrouter'
+      ? '<span class="badge badge-gateway">OpenRouter</span>'
+      : (item.provider_used === 'mistral'
+      ? '<span class="badge badge-savings">Mistral</span>'
+      : (item.provider_used === 'deepseek'
+      ? '<span class="badge badge-gateway">DeepSeek</span>'
+      : `<span class="badge badge-gateway">${escapeHtml(item.provider_used)}</span>`)));
 
     html += `
       <div class="dist-item">
@@ -816,7 +841,12 @@ async function runPromptTest() {
 
     const j = data.jev || {};
     const c = data.costs || {};
-    const providerName = data.selectedProvider === 'openrouter' ? 'OpenRouter' : 'Mammouth AI';
+    const providerName = data.selectedProvider === 'mistral' ? 'Mistral AI (Direct)'
+      : (data.selectedProvider === 'deepseek' ? 'DeepSeek (Direct)'
+      : (data.selectedProvider === 'anthropic' ? 'Anthropic (Direct)'
+      : (data.selectedProvider === 'openai' ? 'OpenAI (Direct)'
+      : (data.selectedProvider === 'google' ? 'Google Gemini'
+      : (data.selectedProvider === 'openrouter' ? 'OpenRouter' : 'Mammouth AI')))));
     const providerBadgeClass = data.selectedProvider === 'openrouter' ? 'badge-gateway' : 'badge-savings';
 
     panel.innerHTML = `
@@ -926,6 +956,14 @@ async function fetchSettings() {
       if (codex && document.getElementById('select-sub-codex')) {
         document.getElementById('select-sub-codex').value = codex.enabled ? 'enabled' : 'disabled';
       }
+      const vibe = subsData.subscriptions?.find(s => s.id === 'mistral_vibe');
+      const geminiCli = subsData.subscriptions?.find(s => s.id === 'gemini_cli');
+      if (vibe && document.getElementById('select-sub-vibe')) {
+        document.getElementById('select-sub-vibe').value = vibe.enabled ? 'enabled' : 'disabled';
+      }
+      if (geminiCli && document.getElementById('select-sub-gemini-cli')) {
+        document.getElementById('select-sub-gemini-cli').value = geminiCli.enabled ? 'enabled' : 'disabled';
+      }
     }
   } catch (err) {
     console.error('Error fetching settings:', err);
@@ -955,6 +993,8 @@ async function saveSettings() {
   const defaultProvider = document.getElementById('select-provider').value;
   const subClaudeVal = document.getElementById('select-sub-claude')?.value;
   const subCodexVal = document.getElementById('select-sub-codex')?.value;
+  const subVibeVal = document.getElementById('select-sub-vibe')?.value;
+  const subGeminiCliVal = document.getElementById('select-sub-gemini-cli')?.value;
 
   const payload = { routingStrategy, defaultProvider };
   if (typesafeApiKey) payload.typesafeApiKey = typesafeApiKey;
@@ -1002,12 +1042,26 @@ async function saveSettings() {
         body: JSON.stringify({ id: 'codex_subscription', enabled: subCodexVal === 'enabled' })
       });
     }
+    if (subVibeVal) {
+      await fetch('/api/subscriptions/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'mistral_vibe', enabled: subVibeVal === 'enabled' })
+      });
+    }
+    if (subGeminiCliVal) {
+      await fetch('/api/subscriptions/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'gemini_cli', enabled: subGeminiCliVal === 'enabled' })
+      });
+    }
 
     if (res.ok) {
       closeSettingsModal();
       fetchSettings();
-      fetchSubscriptions();
-      alert('Settings saved successfully!');
+      await triggerSyncSubscriptions();
+      alert('Settings saved successfully! Provider status refreshed.');
     }
   } catch (err) {
     alert('Failed to save settings: ' + err.message);

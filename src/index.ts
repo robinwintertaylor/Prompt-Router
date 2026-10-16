@@ -23,7 +23,7 @@ import {
   handleUpdateSubscription,
   handleSyncSubscriptions
 } from './routes/api.js';
-import { initSubscriptionsTable, probeSubscriptionCredentials } from './subscriptions.js';
+import { initSubscriptionsTable, probeSubscriptionCredentials, syncConfiguredProviderSubscriptions } from './subscriptions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +31,7 @@ const __dirname = path.dirname(__filename);
 // Initialize DB schema & Subscriptions Table
 initDatabase();
 initSubscriptionsTable();
+syncConfiguredProviderSubscriptions();
 probeSubscriptionCredentials().catch(err => console.warn('[Subscriptions] Initial probe notice:', err.message));
 // Process crash guards
 process.on('uncaughtException', (err) => {

@@ -25,7 +25,7 @@ export interface RouteSelection {
 export interface SessionAffinity {
   anchorModel: string;
   provider: 'mammouth' | 'openrouter';
-  providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free';
+  providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free' | 'mistral_vibe' | 'gemini_cli' | string;
   turnCount: number;
   lastSeen: number;
 }
@@ -47,7 +47,7 @@ export function selectOptimalModel(
   strategy: 'cost_optimized' | 'performance_optimized' | 'balanced' = 'cost_optimized',
   sessionId?: string,
   contextTokens = 0
-): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free'; isSubscription?: boolean } {
+): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free' | 'mistral_vibe' | 'gemini_cli' | string; isSubscription?: boolean } {
   const req = (requestedModel || '').toLowerCase();
   const isAuto =
     !req ||
@@ -123,7 +123,7 @@ export function selectOptimalModel(
     }
   }
 
-  function finalizeDecision(res: { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free'; isSubscription?: boolean }) {
+  function finalizeDecision(res: { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free' | 'mistral_vibe' | 'gemini_cli' | string; isSubscription?: boolean }) {
     if (sessionId) {
       const existing = sessionAffinityStore.get(sessionId);
       sessionAffinityStore.set(sessionId, {
@@ -144,18 +144,22 @@ function evaluateCandidateModel(
   jev: JevEvaluation,
   strategy: 'cost_optimized' | 'performance_optimized' | 'balanced',
   catalog: CatalogModel[]
-): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free'; isSubscription?: boolean } {
+): { model: string; reason: string; providerHint?: 'mammouth' | 'openrouter' | 'both' | 'acp_claude' | 'acp_codex' | 'gemini_free' | 'mistral_vibe' | 'gemini_cli' | string; isSubscription?: boolean } {
   // Query active subscriptions and available free tokens
   const claudeSub = getSubscription('claude_subscription');
   const codexSub = getSubscription('codex_subscription');
   const geminiSub = getSubscription('gemini_free');
+  const geminiCliSub = getSubscription('gemini_cli');
+  const vibeSub = getSubscription('mistral_vibe');
 
   const claudeHealthy = Boolean(claudeSub?.enabled && claudeSub?.connected && (claudeSub?.quota_remaining_pct ?? 0) > 15);
   const claudeConserving = Boolean(claudeSub?.enabled && claudeSub?.connected && (claudeSub?.quota_remaining_pct ?? 0) > 0 && (claudeSub?.quota_remaining_pct ?? 0) <= 15);
   const claudeExhausted = Boolean(claudeSub?.enabled && claudeSub?.connected && (claudeSub?.quota_remaining_pct ?? 0) <= 0);
 
   const codexHealthy = Boolean(codexSub?.enabled && codexSub?.connected && (codexSub?.quota_remaining_pct ?? 0) > 15);
-  const geminiHealthy = Boolean(geminiSub?.enabled && geminiSub?.connected);
+  const geminiCliHealthy = Boolean(geminiCliSub?.enabled && geminiCliSub?.connected && (geminiCliSub?.quota_remaining_pct ?? 0) > 15);
+  const geminiHealthy = Boolean((geminiSub?.enabled && geminiSub?.connected) || geminiCliHealthy);
+  const vibeHealthy = Boolean(vibeSub?.enabled && vibeSub?.connected && (vibeSub?.quota_remaining_pct ?? 0) > 15);
 
   // 1. Dedicated Reasoning Tier (applying TypeSafe Consistency Noul Uncertainty Band 0.30 - 0.70)
   const isDefiniteReasoner = jev.needsReasoner >= 0.70;
@@ -168,7 +172,7 @@ function evaluateCandidateModel(
     (jev.complexityScore >= 4.6 && isReasoningIntent);
 
   // Zero-Credit / Free Tier Mode: If all subscriptions are unavailable and all aggregator budgets/credits are expended
-  const allSubsExhausted = !claudeHealthy && !claudeConserving && !codexHealthy && !geminiHealthy;
+  const allSubsExhausted = !claudeHealthy && !claudeConserving && !codexHealthy && !geminiHealthy && !vibeHealthy;
   const allCreditsExpended = isProviderBudgetExceeded('mammouth') && isProviderBudgetExceeded('openrouter');
   if (allSubsExhausted && allCreditsExpended) {
     if (requiresReasoningModel) {
@@ -176,7 +180,7 @@ function evaluateCandidateModel(
         model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
         reason: `All paid credits exhausted. Jev detected reasoning task (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Routed to free reasoning model 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free' ($0.00 cost).`,
         providerHint: 'openrouter',
-        isSubscription: true
+        isSubscription: false
       };
     }
     if (jev.intent === 'coding_complex' || jev.complexityScore >= 3.6 || jev.intent === 'coding_simple') {
@@ -184,14 +188,14 @@ function evaluateCandidateModel(
         model: 'cohere/north-mini-code:free',
         reason: `All paid credits exhausted. Jev detected code task (score: ${jev.complexityScore}, intent: ${jev.intent}). Routed to free coding model 'cohere/north-mini-code:free' ($0.00 cost).`,
         providerHint: 'openrouter',
-        isSubscription: true
+        isSubscription: false
       };
     }
     return {
       model: 'openrouter/free',
       reason: `All subscription quotas and aggregator credits are currently expended. Switched to Zero-Credit Free Tier (openrouter/free) at $0.00 cost.`,
       providerHint: 'openrouter',
-      isSubscription: true
+      isSubscription: false
     };
   }
 
@@ -266,6 +270,14 @@ function evaluateCandidateModel(
         isSubscription: true
       };
     }
+    if (vibeHealthy) {
+      return {
+        model: 'mistralai/codestral-latest',
+        reason: `Jev classified complex coding (score: ${jev.complexityScore}, intent: ${jev.intent}). Utilized Mistral Vibe ACP subscription free quota ($0.00 marginal cost, ${vibeSub!.quota_remaining_pct.toFixed(0)}% quota remaining).`,
+        providerHint: 'mistral_vibe',
+        isSubscription: true
+      };
+    }
 
     if (catalog.length > 0) {
       const coders = catalog.filter(m => m.tier === 'frontier_coding');
@@ -309,6 +321,15 @@ function evaluateCandidateModel(
         model: 'openai/gpt-4o-mini',
         reason: `Jev detected standard task. Utilized ChatGPT Plus/Pro Codex subscription ($0.00 marginal cost, ${codexSub!.quota_remaining_pct.toFixed(0)}% remaining).`,
         providerHint: 'acp_codex',
+        isSubscription: true
+      };
+    }
+
+    if (geminiCliHealthy) {
+      return {
+        model: 'google/gemini-2.5-flash',
+        reason: `Jev detected standard task. Utilized Google Gemini CLI ACP bridge ($0.00 marginal cost, ${geminiCliSub!.quota_remaining_pct.toFixed(0)}% quota remaining).`,
+        providerHint: 'gemini_cli',
         isSubscription: true
       };
     }
@@ -388,7 +409,7 @@ function evaluateCandidateModel(
   };
 }
 
-export function getSubscriptionProviderForModel(model: string): 'claude_subscription' | 'codex_subscription' | 'gemini_free' | null {
+export function getSubscriptionProviderForModel(model: string): 'claude_subscription' | 'codex_subscription' | 'gemini_free' | 'mistral_vibe' | 'gemini_cli' | null {
   const m = model.toLowerCase();
   if (m.startsWith('anthropic/') || m.includes('claude')) {
     const sub = getSubscription('claude_subscription');
@@ -400,6 +421,22 @@ export function getSubscriptionProviderForModel(model: string): 'claude_subscrip
     const sub = getSubscription('codex_subscription');
     if (sub && sub.enabled && sub.connected && sub.quota_remaining_pct > 0) {
       return 'codex_subscription';
+    }
+  }
+  if (m.startsWith('mistralai/') || m.startsWith('mistral/') || m.includes('codestral') || m.includes('mistral') || m.includes('vibe')) {
+    const sub = getSubscription('mistral_vibe');
+    if (sub && sub.enabled && sub.connected && sub.quota_remaining_pct > 0) {
+      return 'mistral_vibe';
+    }
+  }
+  if (m.startsWith('google/') || m.includes('gemini')) {
+    const cliSub = getSubscription('gemini_cli');
+    if (cliSub && cliSub.enabled && cliSub.connected && cliSub.quota_remaining_pct > 0) {
+      return 'gemini_cli';
+    }
+    const freeSub = getSubscription('gemini_free');
+    if (freeSub && freeSub.enabled && freeSub.connected && freeSub.quota_remaining_pct > 0) {
+      return 'gemini_free';
     }
   }
   return null;

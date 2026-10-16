@@ -7,25 +7,101 @@ import { config } from './config.js';
 import { markProviderBudgetExceeded, clearProviderBudgetExceeded } from './arbitrage.js';
 
 export interface SubscriptionRecord {
-  id: string; // 'claude_subscription' | 'codex_subscription' | 'gemini_free' | 'mammouth_credit' | 'openrouter_credit'
-  provider: 'anthropic' | 'openai' | 'google' | 'mammouth' | 'openrouter';
+  id: string; // 'claude_subscription' | 'codex_subscription' | 'gemini_free' | 'mammouth_credit' | 'openrouter_credit' | 'mistral_direct' | 'deepseek_direct' | 'anthropic_direct' | 'openai_direct'
+  provider: 'anthropic' | 'openai' | 'google' | 'mammouth' | 'openrouter' | 'mistral' | 'deepseek' | string;
   name: string;
   enabled: boolean;
   connected: boolean;
   auth_type: 'acp_cli' | 'oauth_session' | 'free_tier_key' | 'api_key';
   cli_path: string;
   session_token: string;
-  window_type: '5h_rolling' | 'daily' | 'weekly' | 'monthly' | 'credit_balance';
+  window_type: '5h_rolling' | 'daily' | 'weekly' | 'monthly' | 'credit_balance' | 'pay_as_you_go';
   quota_total_tokens: number;
   quota_used_tokens: number;
   quota_remaining_pct: number;
   resets_at: number | null; // epoch ms
   last_checked: number;
   status_message: string;
-  quota_unit?: 'tokens' | 'usd';
-  current_balance?: number; // USD remaining for aggregators
+  quota_unit?: 'tokens' | 'usd' | 'pay_as_you_go';
+  current_balance?: number; // USD remaining for aggregators or USD spend for payg
   max_balance?: number; // USD total budget/credit for aggregators
 }
+
+export interface ConfigurableProviderDef {
+  id: string;
+  provider: string;
+  name: string;
+  settingKey: string;
+  configKey: keyof typeof config;
+  authType: 'api_key';
+  windowType: 'pay_as_you_go';
+  probeUrl: string;
+  probeHeaders: (key: string) => Record<string, string>;
+  formatDetails: (data: any, usage: { totalTokens: number; totalCost: number }) => string;
+}
+
+export const CONFIGURABLE_PROVIDERS: ConfigurableProviderDef[] = [
+  {
+    id: 'mistral_direct',
+    provider: 'mistral',
+    name: 'Mistral AI (Direct API)',
+    settingKey: 'MISTRAL_API_KEY',
+    configKey: 'mistralApiKey',
+    authType: 'api_key',
+    windowType: 'pay_as_you_go',
+    probeUrl: 'https://api.mistral.ai/v1/models',
+    probeHeaders: (key: string) => ({ 'Authorization': `Bearer ${key.trim()}` }),
+    formatDetails: (data: any, usage: { totalTokens: number; totalCost: number }) => {
+      const count = Array.isArray(data?.data) ? data.data.length : 0;
+      return `Direct EU Sovereign API connected (${count} models available, e.g. Codestral, Mistral Large)`;
+    }
+  },
+  {
+    id: 'deepseek_direct',
+    provider: 'deepseek',
+    name: 'DeepSeek AI (Direct API)',
+    settingKey: 'DEEPSEEK_API_KEY',
+    configKey: 'deepseekApiKey',
+    authType: 'api_key',
+    windowType: 'pay_as_you_go',
+    probeUrl: 'https://api.deepseek.com/models',
+    probeHeaders: (key: string) => ({ 'Authorization': `Bearer ${key.trim()}` }),
+    formatDetails: (data: any, usage: { totalTokens: number; totalCost: number }) => {
+      return 'Direct DeepSeek API connected (R1 & V3 active)';
+    }
+  },
+  {
+    id: 'anthropic_direct',
+    provider: 'anthropic',
+    name: 'Anthropic Claude (Direct API)',
+    settingKey: 'ANTHROPIC_API_KEY',
+    configKey: 'anthropicApiKey',
+    authType: 'api_key',
+    windowType: 'pay_as_you_go',
+    probeUrl: 'https://api.anthropic.com/v1/models',
+    probeHeaders: (key: string) => ({
+      'x-api-key': key.trim(),
+      'anthropic-version': '2023-06-01'
+    }),
+    formatDetails: (data: any, usage: { totalTokens: number; totalCost: number }) => {
+      return 'Direct Anthropic API connected (Claude 3.5 & Fable active)';
+    }
+  },
+  {
+    id: 'openai_direct',
+    provider: 'openai',
+    name: 'OpenAI GPT (Direct API)',
+    settingKey: 'OPENAI_API_KEY',
+    configKey: 'openaiApiKey',
+    authType: 'api_key',
+    windowType: 'pay_as_you_go',
+    probeUrl: 'https://api.openai.com/v1/models',
+    probeHeaders: (key: string) => ({ 'Authorization': `Bearer ${key.trim()}` }),
+    formatDetails: (data: any, usage: { totalTokens: number; totalCost: number }) => {
+      return 'Direct OpenAI API connected (GPT-4o & o-series active)';
+    }
+  }
+];
 
 const DEFAULT_SUBSCRIPTIONS: Omit<SubscriptionRecord, 'last_checked'>[] = [
   {
@@ -62,6 +138,44 @@ const DEFAULT_SUBSCRIPTIONS: Omit<SubscriptionRecord, 'last_checked'>[] = [
     quota_remaining_pct: 100.0,
     resets_at: null,
     status_message: 'Ready to check local OpenAI Codex CLI credentials',
+    quota_unit: 'tokens',
+    current_balance: 0,
+    max_balance: 0
+  },
+  {
+    id: 'mistral_vibe',
+    provider: 'mistral',
+    name: 'Mistral Vibe (ACP CLI Bridge)',
+    enabled: true,
+    connected: false,
+    auth_type: 'acp_cli',
+    cli_path: 'vibe',
+    session_token: '',
+    window_type: '5h_rolling',
+    quota_total_tokens: 200000,
+    quota_used_tokens: 0,
+    quota_remaining_pct: 100.0,
+    resets_at: null,
+    status_message: 'Ready to check local Mistral Vibe CLI (vibe / vibe-acp)',
+    quota_unit: 'tokens',
+    current_balance: 0,
+    max_balance: 0
+  },
+  {
+    id: 'gemini_cli',
+    provider: 'google',
+    name: 'Google Gemini (Gemini CLI ACP)',
+    enabled: true,
+    connected: false,
+    auth_type: 'acp_cli',
+    cli_path: 'gemini',
+    session_token: '',
+    window_type: 'daily',
+    quota_total_tokens: 1000000,
+    quota_used_tokens: 0,
+    quota_remaining_pct: 100.0,
+    resets_at: null,
+    status_message: 'Ready to check local Google Gemini CLI (gemini / gemini-cli)',
     quota_unit: 'tokens',
     current_balance: 0,
     max_balance: 0
@@ -175,20 +289,150 @@ export function initSubscriptionsTable() {
   }
 }
 
+export function getProviderUsageStats(provider: string): { totalTokens: number; totalCost: number; requestCount: number } {
+  try {
+    const row = db.prepare(`
+      SELECT
+        COALESCE(SUM(total_tokens), 0) AS total_tokens,
+        COALESCE(SUM(cost_actual), 0) AS total_cost,
+        COUNT(*) AS request_count
+      FROM requests_log
+      WHERE provider_used = ?
+    `).all(provider)[0] as any;
+    return {
+      totalTokens: Number(row?.total_tokens || 0),
+      totalCost: Number(row?.total_cost || 0),
+      requestCount: Number(row?.request_count || 0)
+    };
+  } catch {
+    return { totalTokens: 0, totalCost: 0, requestCount: 0 };
+  }
+}
+
+export function syncConfiguredProviderSubscriptions() {
+  for (const def of CONFIGURABLE_PROVIDERS) {
+    const rawVal = getSetting(def.settingKey, (config as any)[def.configKey]);
+    const isConfigured = Boolean(rawVal && String(rawVal).trim() !== '');
+    const usage = getProviderUsageStats(def.provider);
+
+    const existing = db.prepare('SELECT id FROM subscriptions WHERE id = ?').all(def.id)[0] as any;
+    if (isConfigured) {
+      if (!existing) {
+        db.prepare(`
+          INSERT INTO subscriptions (
+            id, provider, name, enabled, connected, auth_type, cli_path, session_token,
+            window_type, quota_total_tokens, quota_used_tokens, quota_remaining_pct,
+            resets_at, last_checked, status_message, quota_unit, current_balance, max_balance
+          ) VALUES (
+            ?, ?, ?, 1, 1, 'api_key', '', '',
+            'pay_as_you_go', 0, ?, 100.0,
+            NULL, ?, ?, 'pay_as_you_go', ?, 0.0
+          )
+        `).run(
+          def.id, def.provider, def.name,
+          usage.totalTokens,
+          Date.now(),
+          `${def.name} active with direct API key`,
+          usage.totalCost
+        );
+      } else {
+        const initialMsg = `${def.name} active with direct API key`;
+        db.prepare(`
+          UPDATE subscriptions
+          SET enabled = 1, connected = 1, quota_used_tokens = ?, current_balance = ?, quota_unit = 'pay_as_you_go',
+              status_message = CASE WHEN status_message LIKE '%not configured%' THEN ? ELSE status_message END
+          WHERE id = ?
+        `).run(usage.totalTokens, usage.totalCost, initialMsg, def.id);
+      }
+    } else {
+      if (existing) {
+        db.prepare(`
+          UPDATE subscriptions
+          SET enabled = 0, connected = 0, status_message = ?
+          WHERE id = ?
+        `).run(`${def.name} API key not configured in settings`, def.id);
+      }
+    }
+  }
+}
+
+export function recordProviderUsage(
+  provider: string,
+  tokensUsed: number,
+  costUsed: number = 0
+) {
+  const norm = provider.toLowerCase();
+  let subId = '';
+  if (norm === 'mistral') subId = 'mistral_direct';
+  else if (norm === 'deepseek') subId = 'deepseek_direct';
+  else if (norm === 'anthropic') subId = 'anthropic_direct';
+  else if (norm === 'openai') subId = 'openai_direct';
+  else if (norm === 'google') subId = 'gemini_free';
+  else if (norm === 'mammouth') subId = 'mammouth_credit';
+  else if (norm === 'openrouter') subId = 'openrouter_credit';
+  else if (norm === 'acp_claude') subId = 'claude_subscription';
+  else if (norm === 'acp_codex') subId = 'codex_subscription';
+
+  if (!subId) return;
+
+  const sub = getSubscription(subId);
+  if (!sub) return;
+
+  const newUsed = (sub.quota_used_tokens || 0) + tokensUsed;
+  const newBalance = (sub.current_balance || 0) + costUsed;
+
+  try {
+    db.prepare(`
+      UPDATE subscriptions
+      SET quota_used_tokens = ?, current_balance = ?, last_checked = ?
+      WHERE id = ?
+    `).run(newUsed, newBalance, Date.now(), subId);
+  } catch (_) {}
+}
+
 export function getAllSubscriptions(): SubscriptionRecord[] {
   resetExpiredSubscriptionQuotas();
-  const rows = db.prepare('SELECT * FROM subscriptions').all() as any[];
-  return rows.map(r => ({
-    ...r,
-    enabled: Boolean(r.enabled),
-    connected: Boolean(r.connected),
-    quota_remaining_pct: Number(r.quota_remaining_pct),
-    quota_total_tokens: Number(r.quota_total_tokens),
-    quota_used_tokens: Number(r.quota_used_tokens),
-    quota_unit: r.quota_unit || (r.provider === 'mammouth' || r.provider === 'openrouter' ? 'usd' : 'tokens'),
-    current_balance: Number(r.current_balance ?? 0),
-    max_balance: Number(r.max_balance ?? 0)
-  }));
+  syncConfiguredProviderSubscriptions();
+
+  const rows = db.prepare(`
+    SELECT * FROM subscriptions
+    WHERE id IN ('claude_subscription', 'codex_subscription', 'mistral_vibe', 'gemini_cli', 'gemini_free', 'mammouth_credit', 'openrouter_credit')
+       OR enabled = 1
+    ORDER BY
+      CASE
+        WHEN id = 'claude_subscription' THEN 1
+        WHEN id = 'codex_subscription' THEN 2
+        WHEN id = 'mistral_vibe' THEN 3
+        WHEN id = 'gemini_cli' THEN 4
+        WHEN id = 'mistral_direct' THEN 5
+        WHEN id = 'deepseek_direct' THEN 6
+        WHEN id = 'anthropic_direct' THEN 7
+        WHEN id = 'openai_direct' THEN 8
+        WHEN id = 'gemini_free' THEN 9
+        WHEN id = 'mammouth_credit' THEN 10
+        WHEN id = 'openrouter_credit' THEN 11
+        ELSE 12
+      END
+  `).all() as any[];
+
+  return rows.map(r => {
+    const isPayg = r.window_type === 'pay_as_you_go' || r.quota_unit === 'pay_as_you_go';
+    const usage = getProviderUsageStats(r.provider);
+    const usedTokens = isPayg ? usage.totalTokens : Number(r.quota_used_tokens);
+    const balanceVal = isPayg ? usage.totalCost : Number(r.current_balance ?? 0);
+
+    return {
+      ...r,
+      enabled: Boolean(r.enabled),
+      connected: Boolean(r.connected),
+      quota_remaining_pct: Number(r.quota_remaining_pct),
+      quota_total_tokens: Number(r.quota_total_tokens),
+      quota_used_tokens: usedTokens,
+      quota_unit: r.quota_unit || (r.provider === 'mammouth' || r.provider === 'openrouter' ? 'usd' : (isPayg ? 'pay_as_you_go' : 'tokens')),
+      current_balance: balanceVal,
+      max_balance: Number(r.max_balance ?? 0)
+    };
+  });
 }
 
 export function getSubscription(id: string): SubscriptionRecord | null {
@@ -302,6 +546,12 @@ export async function probeSubscriptionCredentials(): Promise<{
   gemini: { available: boolean; method: string; details: string; quota_remaining_pct: number };
   mammouth: { available: boolean; method: string; details: string; quota_remaining_pct: number; balance: number; budget: number };
   openrouter: { available: boolean; method: string; details: string; quota_remaining_pct: number; balance: number; budget: number };
+  mistral?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
+  deepseek?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
+  anthropic?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
+  openai?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
+  vibe?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
+  gemini_cli?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
 }> {
   const homeDir = os.homedir();
   const now = Date.now();
@@ -541,11 +791,238 @@ export async function probeSubscriptionCredentials(): Promise<{
     status_message: openrouterDetails
   });
 
+  // 6. Mistral AI Direct Probe
+  let mistralAvailable = false;
+  let mistralMethod = 'none';
+  let mistralDetails = 'Mistral API Key is not configured';
+  let mistralModelCount = 0;
+
+  const mistralApiKey = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
+  if (mistralApiKey && mistralApiKey.trim()) {
+    mistralMethod = 'api_key';
+    try {
+      const mRes = await fetch('https://api.mistral.ai/v1/models', {
+        headers: { 'Authorization': `Bearer ${mistralApiKey.trim()}` },
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (mRes.ok) {
+        mistralAvailable = true;
+        const mData: any = await mRes.json();
+        mistralModelCount = Array.isArray(mData.data) ? mData.data.length : 0;
+        mistralDetails = `Direct EU Sovereign API connected (${mistralModelCount} models available, e.g. Codestral, Mistral Large)`;
+      } else if (mRes.status === 401) {
+        mistralDetails = 'Invalid Mistral API Key (401 Unauthorized)';
+      } else {
+        mistralDetails = `Mistral API returned HTTP ${mRes.status}`;
+      }
+    } catch (err: any) {
+      mistralDetails = `Failed to probe Mistral: ${err.message}`;
+    }
+  }
+
+  const mistralUsage = getProviderUsageStats('mistral');
+  updateSubscription('mistral_direct', {
+    connected: mistralAvailable,
+    quota_used_tokens: mistralUsage.totalTokens,
+    current_balance: mistralUsage.totalCost,
+    status_message: mistralDetails
+  });
+
+  // 7. DeepSeek Direct Probe
+  let deepseekAvailable = false;
+  let deepseekMethod = 'none';
+  let deepseekDetails = 'DeepSeek API Key is not configured';
+
+  const deepseekApiKey = getSetting('DEEPSEEK_API_KEY', config.deepseekApiKey);
+  if (deepseekApiKey && deepseekApiKey.trim()) {
+    deepseekMethod = 'api_key';
+    try {
+      const dsRes = await fetch('https://api.deepseek.com/models', {
+        headers: { 'Authorization': `Bearer ${deepseekApiKey.trim()}` },
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (dsRes.ok) {
+        deepseekAvailable = true;
+        deepseekDetails = 'Direct DeepSeek API connected (R1 & V3 active)';
+      } else if (dsRes.status === 401) {
+        deepseekDetails = 'Invalid DeepSeek API Key (401 Unauthorized)';
+      } else {
+        deepseekDetails = `DeepSeek API returned HTTP ${dsRes.status}`;
+      }
+    } catch (err: any) {
+      deepseekDetails = `Failed to probe DeepSeek: ${err.message}`;
+    }
+  }
+
+  const deepseekUsage = getProviderUsageStats('deepseek');
+  updateSubscription('deepseek_direct', {
+    connected: deepseekAvailable,
+    quota_used_tokens: deepseekUsage.totalTokens,
+    current_balance: deepseekUsage.totalCost,
+    status_message: deepseekDetails
+  });
+
+  // 8. Anthropic Direct API Key Probe
+  let antDirectAvailable = false;
+  let antDirectMethod = 'none';
+  let antDirectDetails = 'Anthropic Direct API Key is not configured';
+
+  const antDirectKey = getSetting('ANTHROPIC_API_KEY', config.anthropicApiKey);
+  if (antDirectKey && antDirectKey.trim()) {
+    antDirectMethod = 'api_key';
+    try {
+      const antRes = await fetch('https://api.anthropic.com/v1/models', {
+        headers: {
+          'x-api-key': antDirectKey.trim(),
+          'anthropic-version': '2023-06-01'
+        },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (antRes.ok) {
+        antDirectAvailable = true;
+        antDirectDetails = 'Direct Anthropic API connected (Claude 3.5 & Fable active)';
+      } else if (antRes.status === 401) {
+        antDirectDetails = 'Invalid Anthropic API Key (401 Unauthorized)';
+      } else {
+        antDirectDetails = `Anthropic API returned HTTP ${antRes.status}`;
+      }
+    } catch (err: any) {
+      antDirectDetails = `Failed to probe Anthropic: ${err.message}`;
+    }
+  }
+
+  const antDirectUsage = getProviderUsageStats('anthropic');
+  updateSubscription('anthropic_direct', {
+    connected: antDirectAvailable,
+    quota_used_tokens: antDirectUsage.totalTokens,
+    current_balance: antDirectUsage.totalCost,
+    status_message: antDirectDetails
+  });
+
+  // 9. OpenAI Direct API Key Probe
+  let oaiDirectAvailable = false;
+  let oaiDirectMethod = 'none';
+  let oaiDirectDetails = 'OpenAI Direct API Key is not configured';
+
+  const oaiDirectKey = getSetting('OPENAI_API_KEY', config.openaiApiKey);
+  if (oaiDirectKey && oaiDirectKey.trim()) {
+    oaiDirectMethod = 'api_key';
+    try {
+      const oaiRes = await fetch('https://api.openai.com/v1/models', {
+        headers: { 'Authorization': `Bearer ${oaiDirectKey.trim()}` },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (oaiRes.ok) {
+        oaiDirectAvailable = true;
+        oaiDirectDetails = 'Direct OpenAI API connected (GPT-4o & o-series active)';
+      } else if (oaiRes.status === 401) {
+        oaiDirectDetails = 'Invalid OpenAI API Key (401 Unauthorized)';
+      } else {
+        oaiDirectDetails = `OpenAI API returned HTTP ${oaiRes.status}`;
+      }
+    } catch (err: any) {
+      oaiDirectDetails = `Failed to probe OpenAI: ${err.message}`;
+    }
+  }
+
+  const oaiDirectUsage = getProviderUsageStats('openai');
+  updateSubscription('openai_direct', {
+    connected: oaiDirectAvailable,
+    quota_used_tokens: oaiDirectUsage.totalTokens,
+    current_balance: oaiDirectUsage.totalCost,
+    status_message: oaiDirectDetails
+  });
+
+  // 10. Mistral Vibe ACP CLI Probe
+  let vibeAvailable = false;
+  let vibeMethod = 'none';
+  let vibeDetails = 'Mistral Vibe CLI (vibe / vibe-acp) not found';
+  let vibeBin = 'vibe';
+
+  for (const bin of ['vibe', 'vibe-acp', 'mistral-vibe']) {
+    try {
+      const isWin = process.platform === 'win32';
+      const cmd = isWin ? `where ${bin}` : `which ${bin}`;
+      execSync(cmd, { stdio: 'ignore', timeout: 1500 });
+      vibeAvailable = true;
+      vibeBin = bin;
+      vibeMethod = 'acp_cli';
+      vibeDetails = `Found ${bin} CLI binary in system PATH`;
+      break;
+    } catch (_) {}
+  }
+
+  const vibeHome = path.join(homeDir, '.vibe');
+  const vibeConfig = path.join(homeDir, '.vibe', 'config.toml');
+  if (!vibeAvailable && (fs.existsSync(vibeConfig) || fs.existsSync(vibeHome))) {
+    vibeAvailable = true;
+    vibeMethod = 'local_session';
+    vibeDetails = 'Detected Mistral Vibe profile in home directory';
+  } else if (!vibeAvailable && mistralApiKey && mistralApiKey.trim()) {
+    vibeAvailable = true;
+    vibeMethod = 'api_key_bridge';
+    vibeDetails = 'Ready for Mistral Vibe ACP (using active Mistral API key)';
+  }
+
+  const currentVibe = getSubscription('mistral_vibe');
+  updateSubscription('mistral_vibe', {
+    connected: vibeAvailable,
+    cli_path: vibeBin,
+    status_message: vibeAvailable ? `Connected (${vibeDetails})` : 'Mistral Vibe CLI (vibe) not detected'
+  });
+
+  // 11. Google Gemini CLI ACP Probe
+  let geminiCliAvailable = false;
+  let geminiCliMethod = 'none';
+  let geminiCliDetails = 'Gemini CLI (gemini / gemini-cli) not found';
+  let geminiBin = 'gemini';
+
+  for (const bin of ['gemini', 'gemini-cli']) {
+    try {
+      const isWin = process.platform === 'win32';
+      const cmd = isWin ? `where ${bin}` : `which ${bin}`;
+      execSync(cmd, { stdio: 'ignore', timeout: 1500 });
+      geminiCliAvailable = true;
+      geminiBin = bin;
+      geminiCliMethod = 'acp_cli';
+      geminiCliDetails = `Found ${bin} CLI binary in system PATH`;
+      break;
+    } catch (_) {}
+  }
+
+  const geminiHome = path.join(homeDir, '.gemini');
+  const geminiConfig = path.join(homeDir, '.gemini', 'settings.json');
+  const geminiCliKey = getSetting('GEMINI_API_KEY', config.geminiApiKey);
+  if (!geminiCliAvailable && (fs.existsSync(geminiConfig) || fs.existsSync(geminiHome))) {
+    geminiCliAvailable = true;
+    geminiCliMethod = 'local_session';
+    geminiCliDetails = 'Detected Gemini CLI profile in home directory';
+  } else if (!geminiCliAvailable && geminiCliKey && geminiCliKey.trim()) {
+    geminiCliAvailable = true;
+    geminiCliMethod = 'api_key_bridge';
+    geminiCliDetails = 'Ready for Gemini CLI ACP (using active Gemini API key)';
+  }
+
+  const currentGeminiCli = getSubscription('gemini_cli');
+  updateSubscription('gemini_cli', {
+    connected: geminiCliAvailable,
+    cli_path: geminiBin,
+    status_message: geminiCliAvailable ? `Connected (${geminiCliDetails})` : 'Gemini CLI (gemini) not detected'
+  });
+
   return {
     claude: { available: claudeAvailable, method: claudeMethod, details: claudeDetails, quota_remaining_pct: claudePct },
     codex: { available: codexAvailable, method: codexMethod, details: codexDetails, quota_remaining_pct: currentCodex?.quota_remaining_pct ?? 100.0 },
     gemini: { available: geminiAvailable, method: geminiMethod, details: geminiDetails, quota_remaining_pct: currentGemini?.quota_remaining_pct ?? 100.0 },
     mammouth: { available: mammouthAvailable, method: mammouthMethod, details: mammouthDetails, quota_remaining_pct: mammouthPct, balance: mammouthRemaining, budget: mammouthBudget },
-    openrouter: { available: openrouterAvailable, method: openrouterMethod, details: openrouterDetails, quota_remaining_pct: openrouterPct, balance: openrouterBalance, budget: openrouterTotal }
+    openrouter: { available: openrouterAvailable, method: openrouterMethod, details: openrouterDetails, quota_remaining_pct: openrouterPct, balance: openrouterBalance, budget: openrouterTotal },
+    mistral: { available: mistralAvailable, method: mistralMethod, details: mistralDetails, quota_remaining_pct: 100.0 },
+    deepseek: { available: deepseekAvailable, method: deepseekMethod, details: deepseekDetails, quota_remaining_pct: 100.0 },
+    anthropic: { available: antDirectAvailable, method: antDirectMethod, details: antDirectDetails, quota_remaining_pct: 100.0 },
+    openai: { available: oaiDirectAvailable, method: oaiDirectMethod, details: oaiDirectDetails, quota_remaining_pct: 100.0 },
+    vibe: { available: vibeAvailable, method: vibeMethod, details: vibeDetails, quota_remaining_pct: currentVibe?.quota_remaining_pct ?? 100.0 },
+    gemini_cli: { available: geminiCliAvailable, method: geminiCliMethod, details: geminiCliDetails, quota_remaining_pct: currentGeminiCli?.quota_remaining_pct ?? 100.0 }
   };
 }

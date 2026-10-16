@@ -5,10 +5,11 @@ import {
   getSubscription,
   updateSubscription,
   recordSubscriptionUsage,
+  recordProviderUsage,
   resetExpiredSubscriptionQuotas,
   probeSubscriptionCredentials
 } from '../src/subscriptions.js';
-import { selectOptimalModel } from '../src/router.js';
+import { selectOptimalModel, getSubscriptionProviderForModel } from '../src/router.js';
 import { calculateCosts } from '../src/pricing.js';
 import { JevEvaluation } from '../src/jev.js';
 
@@ -126,6 +127,10 @@ async function runSubscriptionTests() {
     quota_remaining_pct: 0.0,
     resets_at: Date.now() + 45 * 60 * 1000 // resets in 45 mins
   });
+  updateSubscription('mistral_vibe', {
+    quota_remaining_pct: 0.0,
+    resets_at: Date.now() + 45 * 60 * 1000
+  });
 
   const routeExhausted = selectOptimalModel('auto', complexEval, 'cost_optimized');
   console.log(`• Exhausted subscription complex prompt routed to: ${routeExhausted.model}`);
@@ -152,6 +157,74 @@ async function runSubscriptionTests() {
     throw new Error('Expected expired quota window to reset back to 100% and 0 tokens used');
   }
   console.log('✅ Automatic Window Reset verified.');
+
+  // 8. Test Mistral AI & Dynamic Provider Settings Integration
+  console.log('\n--- 7. Testing Mistral & Dynamic Settings-Configured Providers ---');
+  const allSubs = getAllSubscriptions();
+  const mistralSub = allSubs.find(s => s.id === 'mistral_direct');
+  console.log('• Checking Mistral direct subscription in dashboard feed:');
+  if (!mistralSub) {
+    throw new Error('Expected Mistral AI direct subscription to appear in subscriptions feed');
+  }
+  console.log(`  Found ${mistralSub.name} (${mistralSub.provider}), connected: ${mistralSub.connected}`);
+  if (mistralSub.provider !== 'mistral' || mistralSub.window_type !== 'pay_as_you_go') {
+    throw new Error('Mistral subscription record fields mismatch');
+  }
+
+  // Test provider usage tracking
+  recordProviderUsage('mistral', 1250, 0.0035);
+  const updatedMistral = getSubscription('mistral_direct');
+  console.log(`  Mistral usage recorded: ${updatedMistral?.quota_used_tokens} toks, $${updatedMistral?.current_balance}`);
+  if (!updatedMistral || updatedMistral.quota_used_tokens < 1250) {
+    throw new Error('Expected Mistral direct usage tracking to increment tokens');
+  }
+  console.log('✅ Mistral subscription & usage tracking verified.');
+
+  // Test dynamic appearance of a new provider when configured in settings
+  console.log('• Testing dynamic provider discovery upon configuration...');
+  const { setSetting } = await import('../src/db.js');
+  setSetting('DEEPSEEK_API_KEY', 'sk-deepseek-mock-test-key');
+  const subsWithDeepseek = getAllSubscriptions();
+  const dsSub = subsWithDeepseek.find(s => s.id === 'deepseek_direct');
+  if (!dsSub) {
+    throw new Error('Expected newly configured DeepSeek provider to dynamically appear in subscriptions');
+  }
+  console.log(`  Newly configured provider '${dsSub.name}' successfully detected and added to feed!`);
+
+  // Clean up mock DeepSeek key
+  setSetting('DEEPSEEK_API_KEY', '');
+  const subsAfterClean = getAllSubscriptions();
+  const dsCleaned = subsAfterClean.find(s => s.id === 'deepseek_direct');
+  if (dsCleaned) {
+    throw new Error('Expected unconfigured provider to be excluded from subscriptions feed');
+  }
+  console.log('✅ Dynamic provider configuration & removal verified.');
+
+  // 9. Test Mistral Vibe & Gemini CLI ACP Configuration
+  console.log('\n--- 8. Testing Mistral Vibe & Gemini CLI ACP Bridges ---');
+  const vibeSub = getSubscription('mistral_vibe');
+  if (!vibeSub) throw new Error('Expected mistral_vibe subscription to be initialized');
+  console.log(`• Found ${vibeSub.name} (CLI: ${vibeSub.cli_path}, auth: ${vibeSub.auth_type})`);
+
+  const geminiCliSub = getSubscription('gemini_cli');
+  if (!geminiCliSub) throw new Error('Expected gemini_cli subscription to be initialized');
+  console.log(`• Found ${geminiCliSub.name} (CLI: ${geminiCliSub.cli_path}, auth: ${geminiCliSub.auth_type})`);
+
+  // Verify ACP routing when connected & quota available
+  updateSubscription('mistral_vibe', { enabled: true, connected: true, quota_remaining_pct: 100 });
+  const mistralAcpVendor = getSubscriptionProviderForModel('mistralai/codestral-latest');
+  console.log(`• ACP dispatch target for 'mistralai/codestral-latest': ${mistralAcpVendor}`);
+  if (mistralAcpVendor !== 'mistral_vibe') {
+    throw new Error(`Expected 'mistral_vibe', got '${mistralAcpVendor}'`);
+  }
+
+  updateSubscription('gemini_cli', { enabled: true, connected: true, quota_remaining_pct: 100 });
+  const geminiAcpVendor = getSubscriptionProviderForModel('google/gemini-2.5-flash');
+  console.log(`• ACP dispatch target for 'google/gemini-2.5-flash': ${geminiAcpVendor}`);
+  if (geminiAcpVendor !== 'gemini_cli') {
+    throw new Error(`Expected 'gemini_cli', got '${geminiAcpVendor}'`);
+  }
+  console.log('✅ Mistral Vibe & Gemini CLI ACP routing verified.');
 
   // Restore initial subscription state
   if (initialClaude) {

@@ -53,7 +53,8 @@ export function classifyModelTier(id: string, name: string, description: string,
     lower.includes('opus') ||
     lower.includes('gemini-1.5-pro') ||
     lower.includes('gemini-2.5-pro') ||
-    lower.includes('mistral-large')
+    lower.includes('mistral-large') ||
+    lower.includes('codestral')
   ) {
     return 'frontier_coding';
   }

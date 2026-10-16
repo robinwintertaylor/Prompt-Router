@@ -6,9 +6,13 @@ import { calculateCosts } from '../pricing.js';
 import { logRequest } from '../db.js';
 import { broadcastTelemetry } from '../telemetry.js';
 import { getFormattedMetrics } from './api.js';
+import { recordProviderUsage } from '../subscriptions.js';
 
 export function recordAndBroadcastRequest(entry: any) {
   logRequest(entry);
+  try {
+    recordProviderUsage(entry.provider_used, entry.total_tokens, entry.cost_actual);
+  } catch (_) {}
   try {
     broadcastTelemetry('request_completed', {
       log: {

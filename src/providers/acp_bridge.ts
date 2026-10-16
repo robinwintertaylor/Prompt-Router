@@ -1,6 +1,15 @@
 import { spawn } from 'child_process';
 import { Readable } from 'stream';
 import { getSubscription, recordSubscriptionUsage } from '../subscriptions.js';
+import { getSetting } from '../db.js';
+import { config } from '../config.js';
+
+export type AcpSubscriptionId =
+  | 'claude_subscription'
+  | 'codex_subscription'
+  | 'gemini_free'
+  | 'mistral_vibe'
+  | 'gemini_cli';
 
 export interface AcpBridgeResponse {
   ok: boolean;
@@ -8,7 +17,7 @@ export interface AcpBridgeResponse {
   data?: any;
   stream?: any;
   error?: string;
-  provider: 'acp_claude' | 'acp_codex' | 'gemini_free';
+  provider: 'acp_claude' | 'acp_codex' | 'gemini_free' | 'mistral_vibe' | 'gemini_cli' | string;
   tokensUsed?: number;
   quotaExhausted?: boolean;
 }
@@ -50,13 +59,15 @@ export function createStreamFromText(model: string, text: string) {
 }
 
 export async function callAcpBridge(
-  subId: 'claude_subscription' | 'codex_subscription' | 'gemini_free',
+  subId: AcpSubscriptionId,
   body: any,
   stream = false
 ): Promise<AcpBridgeResponse> {
   const sub = getSubscription(subId);
   const providerKey = subId === 'claude_subscription' ? 'acp_claude'
-    : (subId === 'codex_subscription' ? 'acp_codex' : 'gemini_free');
+    : (subId === 'codex_subscription' ? 'acp_codex'
+    : (subId === 'mistral_vibe' ? 'mistral_vibe'
+    : (subId === 'gemini_cli' ? 'gemini_cli' : 'gemini_free')));
 
   if (!sub || !sub.enabled) {
     return {
@@ -88,7 +99,11 @@ export async function callAcpBridge(
     : JSON.stringify(lastUserMsg?.content || '');
 
   const promptTokens = Math.ceil(JSON.stringify(messages).length / 4);
-  const cliBinary = sub.cli_path || (subId === 'claude_subscription' ? 'claude' : 'codex');
+  const cliBinary = sub.cli_path || (
+    subId === 'claude_subscription' ? 'claude'
+    : (subId === 'mistral_vibe' ? 'vibe'
+    : (subId === 'gemini_cli' || subId === 'gemini_free' ? 'gemini' : 'codex'))
+  );
 
   return new Promise<AcpBridgeResponse>((resolve) => {
     let resolved = false;
@@ -102,16 +117,39 @@ export async function callAcpBridge(
         args.push('--system-prompt', typeof systemMsg.content === 'string' ? systemMsg.content : JSON.stringify(systemMsg.content));
       }
       args.push(promptText);
+    } else if (subId === 'mistral_vibe') {
+      // Mistral Vibe accepts -p / --prompt for non-interactive prompt execution
+      args.push('-p', promptText);
+    } else if (subId === 'gemini_cli' || subId === 'gemini_free') {
+      // Google Gemini CLI accepts -p / --prompt
+      args.push('-p', promptText);
     } else {
       args.push('exec', promptText);
     }
 
+    const isWin = process.platform === 'win32';
+    // For Windows cmd execution, ensure arguments with spaces are safely quoted
+    const safeArgs = isWin
+      ? args.map(arg => {
+          if (typeof arg === 'string' && (arg.includes(' ') || arg.includes('\n')) && !arg.startsWith('"')) {
+            return `"${arg.replace(/"/g, '\\"')}"`;
+          }
+          return arg;
+        })
+      : args;
+
     try {
-      const child = spawn(cliBinary, args, {
+      const mistralKey = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
+      const geminiKey = getSetting('GEMINI_API_KEY', config.geminiApiKey);
+
+      const child = spawn(cliBinary, safeArgs, {
         shell: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
-          ...(sub.session_token ? { ACP_SESSION_TOKEN: sub.session_token } : {})
+          ...(sub.session_token ? { ACP_SESSION_TOKEN: sub.session_token } : {}),
+          ...(subId === 'mistral_vibe' && mistralKey ? { MISTRAL_API_KEY: mistralKey.trim(), VIBE_API_KEY: mistralKey.trim() } : {}),
+          ...((subId === 'gemini_cli' || subId === 'gemini_free') && geminiKey ? { GEMINI_API_KEY: geminiKey.trim() } : {})
         }
       });
 

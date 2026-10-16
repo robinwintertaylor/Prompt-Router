@@ -196,7 +196,7 @@
           </button>
         </div>
         <p style="font-size: 12px; color: var(--text-muted); margin: 6px 0 14px 0;">
-          Jev monitors active ACP subscription free tokens ($0.00 marginal cost) and live prepaid credits across OpenRouter and Mammouth AI before routing prompts.
+          Jev monitors active ACP subscription free tokens ($0.00 marginal cost), configured direct API providers (Mistral AI, Anthropic, OpenAI, DeepSeek), and live prepaid aggregator credits before routing prompts.
         </p>
         <div id="subscriptions-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
           <!-- Rendered dynamically by app.js -->
@@ -369,6 +369,22 @@
               <label>ChatGPT Plus / Pro (Codex ACP)</label>
               <select id="select-sub-codex">
                 <option value="enabled">Enabled (Auto-probe local session)</option>
+                <option value="disabled">Disabled</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label>Mistral Vibe (ACP Bridge)</label>
+              <select id="select-sub-vibe">
+                <option value="enabled">Enabled (Auto-probe vibe / vibe-acp)</option>
+                <option value="disabled">Disabled</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label>Google Gemini CLI (ACP Bridge)</label>
+              <select id="select-sub-gemini-cli">
+                <option value="enabled">Enabled (Auto-probe gemini / gemini-cli)</option>
                 <option value="disabled">Disabled</option>
               </select>
             </div>
