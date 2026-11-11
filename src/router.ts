@@ -175,18 +175,47 @@ function evaluateCandidateModel(
   const allSubsExhausted = !claudeHealthy && !claudeConserving && !codexHealthy && !geminiHealthy && !vibeHealthy;
   const allCreditsExpended = isProviderBudgetExceeded('mammouth') && isProviderBudgetExceeded('openrouter');
   if (allSubsExhausted && allCreditsExpended) {
+    const mistralKey = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
+    const nvidiaKey = getSetting('NVIDIA_API_KEY', config.nvidiaApiKey);
+    const deepseekKey = getSetting('DEEPSEEK_API_KEY', config.deepseekApiKey);
+
+    if (mistralKey && mistralKey.trim()) {
+      const mModel = requiresReasoningModel ? 'mistral/mistral-large-latest' : ((jev.intent.includes('coding') || jev.complexityScore >= 3.0) ? 'mistral/codestral-latest' : 'mistral/mistral-small-latest');
+      return {
+        model: mModel,
+        reason: `Aggregator credits exhausted. Routed to active Mistral AI direct API '${mModel}'.`,
+        providerHint: 'mistral'
+      };
+    }
+    if (nvidiaKey && nvidiaKey.trim()) {
+      const nvModel = requiresReasoningModel ? 'deepseek-ai/deepseek-r1' : 'meta/llama-3.3-70b-instruct';
+      return {
+        model: nvModel,
+        reason: `Aggregator credits exhausted. Routed to active NVIDIA NIM API '${nvModel}'.`,
+        providerHint: 'nvidia'
+      };
+    }
+    if (deepseekKey && deepseekKey.trim()) {
+      const dsModel = requiresReasoningModel ? 'deepseek-reasoner' : 'deepseek-chat';
+      return {
+        model: dsModel,
+        reason: `Aggregator credits exhausted. Routed to active DeepSeek direct API '${dsModel}'.`,
+        providerHint: 'deepseek'
+      };
+    }
+
     if (requiresReasoningModel) {
       return {
-        model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-        reason: `All paid credits exhausted. Jev detected reasoning task (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Routed to free reasoning model 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free' ($0.00 cost).`,
+        model: 'deepseek/deepseek-r1:free',
+        reason: `All paid credits exhausted. Jev detected reasoning task (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Routed to free reasoning model 'deepseek/deepseek-r1:free' ($0.00 cost).`,
         providerHint: 'openrouter',
         isSubscription: false
       };
     }
     if (jev.intent === 'coding_complex' || jev.complexityScore >= 3.6 || jev.intent === 'coding_simple') {
       return {
-        model: 'cohere/north-mini-code:free',
-        reason: `All paid credits exhausted. Jev detected code task (score: ${jev.complexityScore}, intent: ${jev.intent}). Routed to free coding model 'cohere/north-mini-code:free' ($0.00 cost).`,
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        reason: `All paid credits exhausted. Jev detected code task (score: ${jev.complexityScore}, intent: ${jev.intent}). Routed to free coding model 'meta-llama/llama-3.3-70b-instruct:free' ($0.00 cost).`,
         providerHint: 'openrouter',
         isSubscription: false
       };
@@ -213,6 +242,14 @@ function evaluateCandidateModel(
         model: 'anthropic/claude-3.5-sonnet',
         reason: `Jev detected frontier reasoning (score: ${jev.complexityScore}). Allocated critical Claude subscription quota (${claudeSub!.quota_remaining_pct.toFixed(0)}% remaining in window).`,
         providerHint: 'acp_claude',
+        isSubscription: true
+      };
+    }
+    if (vibeHealthy) {
+      return {
+        model: 'mistralai/mistral-large-latest',
+        reason: `Jev detected reasoning requirement (prob: ${(jev.needsReasoner * 100).toFixed(0)}%, complexity: ${jev.complexityScore}). Utilized Mistral Vibe ACP subscription free quota ($0.00 marginal cost, ${vibeSub!.quota_remaining_pct.toFixed(0)}% window quota remaining).`,
+        providerHint: 'mistral_vibe',
         isSubscription: true
       };
     }
@@ -442,7 +479,7 @@ export function getSubscriptionProviderForModel(model: string): 'claude_subscrip
   return null;
 }
 
-export function getDirectVendorIfConfigured(model: string): 'anthropic' | 'openai' | 'mistral' | 'deepseek' | 'google' | null {
+export function getDirectVendorIfConfigured(model: string): 'anthropic' | 'openai' | 'mistral' | 'deepseek' | 'google' | 'nvidia' | null {
   const m = model.toLowerCase();
 
   if (m.startsWith('anthropic/') || m.includes('claude')) {
@@ -465,8 +502,192 @@ export function getDirectVendorIfConfigured(model: string): 'anthropic' | 'opena
     const key = getSetting('GEMINI_API_KEY', config.geminiApiKey);
     if (key && key.trim() !== '') return 'google';
   }
+  if (m.startsWith('nvidia/') || m.includes('nemotron') || m.includes('llama') || m.includes('nvapi')) {
+    const key = getSetting('NVIDIA_API_KEY', config.nvidiaApiKey);
+    if (key && key.trim() !== '') return 'nvidia';
+  }
 
   return null;
+}
+async function recoverWithNextBestProviderOrFreeModel(
+  initialModel: string,
+  body: any,
+  stream: boolean,
+  jev: JevEvaluation,
+  failedProviders: Set<string>,
+  routingReason: string
+): Promise<{
+  recovered: boolean;
+  providerResponse: any;
+  selectedModel: string;
+  selectedProvider: string;
+  routingReason: string;
+  isSubscription?: boolean;
+}> {
+  // 1. Check Healthy ACP Linked Providers (Free local or subscription tokens)
+  const vibeSub = getSubscription('mistral_vibe');
+  if (vibeSub && vibeSub.enabled && vibeSub.connected && (vibeSub.quota_remaining_pct ?? 0) > 0 && !failedProviders.has('mistral_vibe')) {
+    const acpModel = (initialModel.includes('code') || jev.intent.includes('coding'))
+      ? 'mistralai/codestral-latest'
+      : ((initialModel.includes('large') || initialModel.includes('r1') || jev.needsReasoner >= 0.3) ? 'mistralai/mistral-large-latest' : 'mistralai/mistral-small-latest');
+    console.warn(`[Router] Attempting failover recovery via Mistral Vibe ACP with '${acpModel}'...`);
+    const vibeRes = await callAcpBridge('mistral_vibe', { ...body, model: acpModel }, stream);
+    if (vibeRes.ok) {
+      console.log(`⚡ [Prompt-Router] Recovered via Mistral Vibe ACP with model '${acpModel}' ($0.00 marginal cost)`);
+      return {
+        recovered: true,
+        providerResponse: vibeRes,
+        selectedModel: acpModel,
+        selectedProvider: 'mistral_vibe',
+        routingReason: routingReason + ` [Recovered via Mistral Vibe ACP: '${acpModel}']`,
+        isSubscription: true
+      };
+    }
+    failedProviders.add('mistral_vibe');
+  }
+
+  const claudeSub = getSubscription('claude_subscription');
+  if (claudeSub && claudeSub.enabled && claudeSub.connected && (claudeSub.quota_remaining_pct ?? 0) > 0 && !failedProviders.has('claude_subscription')) {
+    console.warn(`[Router] Attempting failover recovery via Claude Pro ACP...`);
+    const cRes = await callAcpBridge('claude_subscription', { ...body, model: 'anthropic/claude-3.5-sonnet' }, stream);
+    if (cRes.ok) {
+      return {
+        recovered: true,
+        providerResponse: cRes,
+        selectedModel: 'anthropic/claude-3.5-sonnet',
+        selectedProvider: 'acp_claude',
+        routingReason: routingReason + ` [Recovered via Claude ACP]`,
+        isSubscription: true
+      };
+    }
+    failedProviders.add('claude_subscription');
+  }
+  // 2. Check Direct Configured Vendor APIs
+  const mistralKey = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
+  if (mistralKey && mistralKey.trim() && !failedProviders.has('mistral')) {
+    const mModel = (initialModel.includes('large') || jev.needsReasoner >= 0.3)
+      ? 'mistral-large-latest'
+      : ((initialModel.includes('code') || jev.intent.includes('coding')) ? 'codestral-latest' : 'mistral-small-latest');
+    console.warn(`[Router] Attempting failover recovery via Direct Mistral AI with '${mModel}'...`);
+    const mRes = await callDirectOpenAICompatible('mistral', { ...body, model: mModel }, stream);
+    if (mRes.ok) {
+      console.log(`⚡ [Prompt-Router] Recovered via Direct Mistral AI with '${mModel}'`);
+      return {
+        recovered: true,
+        providerResponse: mRes,
+        selectedModel: mModel,
+        selectedProvider: 'mistral',
+        routingReason: routingReason + ` [Recovered via Direct Mistral API: '${mModel}']`
+      };
+    }
+    failedProviders.add('mistral');
+  }
+
+  const nvidiaKey = getSetting('NVIDIA_API_KEY', config.nvidiaApiKey);
+  if (nvidiaKey && nvidiaKey.trim() && !failedProviders.has('nvidia')) {
+    const nvModel = (initialModel.includes('r1') || jev.needsReasoner >= 0.3)
+      ? 'deepseek-ai/deepseek-r1'
+      : 'meta/llama-3.3-70b-instruct';
+    console.warn(`[Router] Attempting failover recovery via NVIDIA NIM with '${nvModel}'...`);
+    const nvRes = await callDirectOpenAICompatible('nvidia', { ...body, model: nvModel }, stream);
+    if (nvRes.ok) {
+      console.log(`⚡ [Prompt-Router] Recovered via NVIDIA NIM with '${nvModel}'`);
+      return {
+        recovered: true,
+        providerResponse: nvRes,
+        selectedModel: nvModel,
+        selectedProvider: 'nvidia',
+        routingReason: routingReason + ` [Recovered via NVIDIA NIM: '${nvModel}']`
+      };
+    }
+    failedProviders.add('nvidia');
+  }
+
+  const deepseekKey = getSetting('DEEPSEEK_API_KEY', config.deepseekApiKey);
+  if (deepseekKey && deepseekKey.trim() && !failedProviders.has('deepseek')) {
+    const dsModel = (initialModel.includes('r1') || jev.needsReasoner >= 0.3) ? 'deepseek-reasoner' : 'deepseek-chat';
+    console.warn(`[Router] Attempting failover recovery via Direct DeepSeek with '${dsModel}'...`);
+    const dsRes = await callDirectOpenAICompatible('deepseek', { ...body, model: dsModel }, stream);
+    if (dsRes.ok) {
+      return {
+        recovered: true,
+        providerResponse: dsRes,
+        selectedModel: dsModel,
+        selectedProvider: 'deepseek',
+        routingReason: routingReason + ` [Recovered via Direct DeepSeek: '${dsModel}']`
+      };
+    }
+    failedProviders.add('deepseek');
+  }
+
+  const anthropicKey = getSetting('ANTHROPIC_API_KEY', config.anthropicApiKey);
+  if (anthropicKey && anthropicKey.trim() && !failedProviders.has('anthropic')) {
+    console.warn(`[Router] Attempting failover recovery via Direct Anthropic...`);
+    const antRes = await callDirectAnthropic({ ...body, model: 'claude-3-5-sonnet-20241022' }, stream);
+    if (antRes.ok) {
+      return {
+        recovered: true,
+        providerResponse: antRes,
+        selectedModel: 'claude-3-5-sonnet-20241022',
+        selectedProvider: 'anthropic',
+        routingReason: routingReason + ` [Recovered via Direct Anthropic]`
+      };
+    }
+    failedProviders.add('anthropic');
+  }
+
+  const openaiKey = getSetting('OPENAI_API_KEY', config.openaiApiKey);
+  if (openaiKey && openaiKey.trim() && !failedProviders.has('openai')) {
+    const oaiModel = initialModel.includes('4o') && !initialModel.includes('mini') ? 'gpt-4o' : 'gpt-4o-mini';
+    console.warn(`[Router] Attempting failover recovery via Direct OpenAI with '${oaiModel}'...`);
+    const oaiRes = await callDirectOpenAICompatible('openai', { ...body, model: oaiModel }, stream);
+    if (oaiRes.ok) {
+      return {
+        recovered: true,
+        providerResponse: oaiRes,
+        selectedModel: oaiModel,
+        selectedProvider: 'openai',
+        routingReason: routingReason + ` [Recovered via Direct OpenAI: '${oaiModel}']`
+      };
+    }
+    failedProviders.add('openai');
+  }
+
+
+  // 3. Check OpenRouter Free Tier Pool (Zero-Credit Recovery)
+  const openrouterKey = getSetting('OPENROUTER_API_KEY', config.openrouterApiKey);
+  if (openrouterKey && openrouterKey.trim()) {
+    const freeModels = [
+      'openrouter/free',
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'deepseek/deepseek-r1:free',
+      'google/gemini-2.0-flash-exp:free',
+      'qwen/qwen-2.5-coder-32b-instruct:free',
+      'mistralai/mistral-7b-instruct:free'
+    ];
+    for (const freeModel of freeModels) {
+      console.warn(`⚡ [Prompt-Router] Attempting Zero-Credit Recovery with '${freeModel}' via OpenRouter...`);
+      const freeRes = await callOpenRouter({ ...body, model: freeModel }, stream);
+      if (freeRes.ok) {
+        console.log(`🎉 [Prompt-Router] Zero-Credit Recovery successful with '${freeModel}' ($0.00 cost)`);
+        return {
+          recovered: true,
+          providerResponse: freeRes,
+          selectedModel: freeModel,
+          selectedProvider: 'openrouter',
+          routingReason: routingReason + ` [Zero-Credit Free Tier: ${freeModel}]`
+        };
+      }
+    }
+  }
+
+  return {
+    recovered: false,
+    providerResponse: null,
+    selectedModel: initialModel,
+    selectedProvider: 'none',
+    routingReason
+  };
 }
 
 export async function executeRoutedCompletion(
@@ -486,12 +707,13 @@ export async function executeRoutedCompletion(
   const defaultProvider = (getSetting('DEFAULT_PROVIDER', config.defaultProvider) as any) || 'mammouth';
 
   // 1. Jev decides the best model across the catalog & subscriptions
-  const { model, reason, providerHint, isSubscription } = selectOptimalModel(body.model, jev, strategy, sessionId, contextTokens);
+  const { model, reason, providerHint } = selectOptimalModel(body.model, jev, strategy, sessionId, contextTokens);
 
   // 2. Check Subscription / ACP Dispatch:
   // If model is served by an active subscription with quota, dispatch via ACP bridge
   const subVendor = getSubscriptionProviderForModel(model);
   const modifiedBody = { ...body, model };
+  const failedProviders = new Set<string>();
 
   if (subVendor) {
     const acpRes = await callAcpBridge(subVendor, modifiedBody, stream);
@@ -505,6 +727,7 @@ export async function executeRoutedCompletion(
         isSubscription: true
       };
     } else {
+      failedProviders.add(subVendor);
       console.warn(`[Router] Subscription ACP dispatch for ${subVendor} failed (${acpRes.error}). Falling back to direct API / aggregator...`);
     }
   }
@@ -527,6 +750,7 @@ export async function executeRoutedCompletion(
         routingReason: reason + ` [Direct ${directVendor.toUpperCase()} dispatch]`
       };
     } else {
+      failedProviders.add(directVendor);
       console.warn(`[Router] Direct ${directVendor} call failed (${directRes.error}). Falling back to aggregator pool...`);
     }
   }
@@ -646,45 +870,23 @@ export async function executeRoutedCompletion(
     }
   }
 
-  // 7. Tier Safeguard Fallback: If both providers failed on the requested model,
-  // try an equivalent fallback model on the healthy provider so agent sessions do not fail
-  if (!res.ok && openrouterKey && !isProviderBudgetExceeded('openrouter')) {
-    let safeguardModel = 'openai/gpt-4o-mini';
-    if (model.includes('sonnet') || model.includes('opus') || model.includes('r1') || model.includes('gpt-4')) {
-      safeguardModel = 'openai/gpt-4o';
-    } else if (model.includes('flash') || model.includes('cheap')) {
-      safeguardModel = 'google/gemini-2.5-flash';
-    }
-
-    if (safeguardModel !== model) {
-      console.warn(`[Router] Primary and secondary providers failed for '${model}'. Attempting tier safeguard recovery with '${safeguardModel}' on OpenRouter...`);
-      const fallbackBody = { ...body, model: safeguardModel };
-      const fallbackRes = await callOpenRouter(fallbackBody, stream);
-      if (fallbackRes.ok) {
-        console.log(`⚡ [Prompt-Router] Safeguard recovery: Routed prompt to fallback model '${safeguardModel}' via OPENROUTER`);
-        return {
-          providerResponse: fallbackRes,
-          selectedModel: safeguardModel,
-          selectedProvider: 'openrouter',
-          routingReason: reason + ` [Recovered via safeguard '${safeguardModel}']`
-        };
-      }
-    }
-  }
-
-  // 8. Zero-Credit Free Tier Fallback: When all account credits and budgets are exhausted,
-  // automatically route to OpenRouter's free tier model (openrouter/free) at $0.00 cost so developer agent sessions NEVER fail!
-  if (!res.ok && openrouterKey) {
-    console.warn(`⚡ [Prompt-Router] All aggregator credits exhausted. Attempting Zero-Credit Recovery with 'openrouter/free'...`);
-    const freeBody = { ...body, model: 'openrouter/free' };
-    const freeRes = await callOpenRouter(freeBody, stream);
-    if (freeRes.ok) {
-      console.log(`🎉 [Prompt-Router] Zero-Credit Recovery successful! Routed prompt to 'openrouter/free' via OpenRouter at $0.00 marginal cost.`);
+  // 7. Dynamic Next-Best Model & Provider Fallback:
+  // If primary and secondary failed (e.g. out of credits/budget, rate limits, provider errors),
+  // search across ACP linked providers, direct vendor APIs, and free tier pools so sessions NEVER fail
+  if (!res.ok) {
+    failedProviders.add(primaryProvider);
+    failedProviders.add(secondaryProvider);
+    console.warn(`⚡ [Prompt-Router] Primary routes failed for '${model}'. Activating Next-Best Provider & Model Recovery Engine...`);
+    const recovery = await recoverWithNextBestProviderOrFreeModel(
+      model, body, stream, jev, failedProviders, reason
+    );
+    if (recovery.recovered) {
       return {
-        providerResponse: freeRes,
-        selectedModel: 'openrouter/free',
-        selectedProvider: 'openrouter',
-        routingReason: reason + ' [Zero-Credit Fallback: Routed to openrouter/free]'
+        providerResponse: recovery.providerResponse,
+        selectedModel: recovery.selectedModel,
+        selectedProvider: recovery.selectedProvider,
+        routingReason: recovery.routingReason,
+        isSubscription: recovery.isSubscription
       };
     }
   }

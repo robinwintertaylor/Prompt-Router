@@ -100,6 +100,21 @@ export const CONFIGURABLE_PROVIDERS: ConfigurableProviderDef[] = [
     formatDetails: (data: any, usage: { totalTokens: number; totalCost: number }) => {
       return 'Direct OpenAI API connected (GPT-4o & o-series active)';
     }
+  },
+  {
+    id: 'nvidia_direct',
+    provider: 'nvidia',
+    name: 'NVIDIA NIM (Free Developer API)',
+    settingKey: 'NVIDIA_API_KEY',
+    configKey: 'nvidiaApiKey',
+    authType: 'api_key',
+    windowType: 'pay_as_you_go',
+    probeUrl: 'https://integrate.api.nvidia.com/v1/models',
+    probeHeaders: (key: string) => ({ 'Authorization': `Bearer ${key.trim()}` }),
+    formatDetails: (data: any, usage: { totalTokens: number; totalCost: number }) => {
+      const count = Array.isArray(data?.data) ? data.data.length : 81;
+      return `Direct NVIDIA NIM active (${count} models available, e.g. Llama 3.3 70B, DeepSeek R1)`;
+    }
   }
 ];
 
@@ -236,6 +251,25 @@ const DEFAULT_SUBSCRIPTIONS: Omit<SubscriptionRecord, 'last_checked'>[] = [
     quota_unit: 'usd',
     current_balance: 0,
     max_balance: 0
+  },
+  {
+    id: 'nvidia_direct',
+    provider: 'nvidia',
+    name: 'NVIDIA NIM (Free Developer API)',
+    enabled: true,
+    connected: false,
+    auth_type: 'api_key',
+    cli_path: '',
+    session_token: '',
+    window_type: 'pay_as_you_go',
+    quota_total_tokens: 1000,
+    quota_used_tokens: 0,
+    quota_remaining_pct: 100.0,
+    resets_at: null,
+    status_message: 'NVIDIA NIM (Get free developer key at build.nvidia.com)',
+    quota_unit: 'pay_as_you_go',
+    current_balance: 0,
+    max_balance: 1000
   }
 ];
 
@@ -268,23 +302,27 @@ export function initSubscriptionsTable() {
   try { db.exec("ALTER TABLE subscriptions ADD COLUMN max_balance REAL DEFAULT 0.0;"); } catch (_) {}
 
   for (const s of DEFAULT_SUBSCRIPTIONS) {
-    const existing = db.prepare('SELECT id FROM subscriptions WHERE id = ?').all(s.id)[0];
-    if (!existing) {
-      db.prepare(`
-        INSERT INTO subscriptions (
-          id, provider, name, enabled, connected, auth_type, cli_path, session_token,
-          window_type, quota_total_tokens, quota_used_tokens, quota_remaining_pct,
-          resets_at, last_checked, status_message, quota_unit, current_balance, max_balance
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?
-        )
-      `).run(
-        s.id, s.provider, s.name, s.enabled ? 1 : 0, s.connected ? 1 : 0, s.auth_type, s.cli_path, s.session_token,
-        s.window_type, s.quota_total_tokens, s.quota_used_tokens, s.quota_remaining_pct,
-        s.resets_at, Date.now(), s.status_message, s.quota_unit || 'tokens', s.current_balance ?? 0, s.max_balance ?? 0
-      );
+    try {
+      const existing = db.prepare('SELECT id FROM subscriptions WHERE id = ?').all(s.id)[0];
+      if (!existing) {
+        db.prepare(`
+          INSERT INTO subscriptions (
+            id, provider, name, enabled, connected, auth_type, cli_path, session_token,
+            window_type, quota_total_tokens, quota_used_tokens, quota_remaining_pct,
+            resets_at, last_checked, status_message, quota_unit, current_balance, max_balance
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?
+          )
+        `).run(
+          s.id, s.provider, s.name, s.enabled ? 1 : 0, s.connected ? 1 : 0, s.auth_type, s.cli_path, s.session_token,
+          s.window_type, s.quota_total_tokens, s.quota_used_tokens, s.quota_remaining_pct,
+          s.resets_at, Date.now(), s.status_message, s.quota_unit || 'tokens', s.current_balance ?? 0, s.max_balance ?? 0
+        );
+      }
+    } catch (err: any) {
+      console.warn(`[Subscriptions] Warning initializing subscription record '${s.id}':`, err.message);
     }
   }
 }
@@ -345,7 +383,23 @@ export function syncConfiguredProviderSubscriptions() {
         `).run(usage.totalTokens, usage.totalCost, initialMsg, def.id);
       }
     } else {
-      if (existing) {
+      if (!existing) {
+        db.prepare(`
+          INSERT INTO subscriptions (
+            id, provider, name, enabled, connected, auth_type, cli_path, session_token,
+            window_type, quota_total_tokens, quota_used_tokens, quota_remaining_pct,
+            resets_at, last_checked, status_message, quota_unit, current_balance, max_balance
+          ) VALUES (
+            ?, ?, ?, 1, 0, 'api_key', '', '',
+            'pay_as_you_go', 0, 0, 100.0,
+            NULL, ?, ?, 'pay_as_you_go', 0.0, 0.0
+          )
+        `).run(
+          def.id, def.provider, def.name,
+          Date.now(),
+          `${def.name} API key not configured in settings`
+        );
+      } else {
         db.prepare(`
           UPDATE subscriptions
           SET enabled = 0, connected = 0, status_message = ?
@@ -367,6 +421,7 @@ export function recordProviderUsage(
   else if (norm === 'deepseek') subId = 'deepseek_direct';
   else if (norm === 'anthropic') subId = 'anthropic_direct';
   else if (norm === 'openai') subId = 'openai_direct';
+  else if (norm === 'nvidia') subId = 'nvidia_direct';
   else if (norm === 'google') subId = 'gemini_free';
   else if (norm === 'mammouth') subId = 'mammouth_credit';
   else if (norm === 'openrouter') subId = 'openrouter_credit';
@@ -396,7 +451,7 @@ export function getAllSubscriptions(connectedOnly: boolean = false): Subscriptio
 
   const rows = db.prepare(`
     SELECT * FROM subscriptions
-    WHERE id IN ('claude_subscription', 'codex_subscription', 'mistral_vibe', 'gemini_cli', 'gemini_free', 'mammouth_credit', 'openrouter_credit')
+    WHERE id IN ('claude_subscription', 'codex_subscription', 'mistral_vibe', 'gemini_cli', 'gemini_free', 'mammouth_credit', 'openrouter_credit', 'nvidia_direct')
        OR enabled = 1
     ORDER BY
       CASE
@@ -404,14 +459,15 @@ export function getAllSubscriptions(connectedOnly: boolean = false): Subscriptio
         WHEN id = 'codex_subscription' THEN 2
         WHEN id = 'mistral_vibe' THEN 3
         WHEN id = 'gemini_cli' THEN 4
-        WHEN id = 'mistral_direct' THEN 5
-        WHEN id = 'deepseek_direct' THEN 6
-        WHEN id = 'anthropic_direct' THEN 7
-        WHEN id = 'openai_direct' THEN 8
-        WHEN id = 'gemini_free' THEN 9
-        WHEN id = 'mammouth_credit' THEN 10
-        WHEN id = 'openrouter_credit' THEN 11
-        ELSE 12
+        WHEN id = 'gemini_free' THEN 5
+        WHEN id = 'mammouth_credit' THEN 6
+        WHEN id = 'openrouter_credit' THEN 7
+        WHEN id = 'nvidia_direct' THEN 8
+        WHEN id = 'mistral_direct' THEN 9
+        WHEN id = 'deepseek_direct' THEN 10
+        WHEN id = 'anthropic_direct' THEN 11
+        WHEN id = 'openai_direct' THEN 12
+        ELSE 13
       END
   `).all() as any[];
 
@@ -556,6 +612,7 @@ export async function probeSubscriptionCredentials(): Promise<{
   deepseek?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
   anthropic?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
   openai?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
+  nvidia?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
   vibe?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
   gemini_cli?: { available: boolean; method: string; details: string; quota_remaining_pct: number };
 }> {
@@ -585,32 +642,45 @@ export async function probeSubscriptionCredentials(): Promise<{
   try {
     const isWin = process.platform === 'win32';
     const cmd = isWin ? 'where claude' : 'which claude';
-    execSync(cmd, { stdio: 'ignore', timeout: 1500 });
+    execSync(cmd, { stdio: 'ignore', timeout: 1500, windowsHide: true });
     claudeCliFound = true;
   } catch (_) {}
 
   if (claudeCliFound) {
     try {
-      const authOut = execSync('claude auth status', { encoding: 'utf8', timeout: 3000 });
+      const authOut = execSync('claude auth status', { encoding: 'utf8', timeout: 3000, windowsHide: true });
       const authJson = JSON.parse(authOut.trim());
       if (authJson.loggedIn) {
         claudeAvailable = true;
         claudeMethod = authJson.authMethod || 'oauth_session';
         claudeDetails = `Authenticated session active (${claudeMethod})`;
       } else {
-        claudeAvailable = hasLocalClaudeConfig;
-        claudeMethod = 'local_session';
-        claudeDetails = 'Claude session detected; OAuth token expired or logged out.';
+        claudeAvailable = false;
+        claudeMethod = 'none';
+        claudeDetails = 'Claude CLI found, but OAuth session is expired or logged out. Run "claude" in terminal.';
       }
-    } catch (_) {
-      claudeAvailable = hasLocalClaudeConfig;
-      claudeMethod = 'acp_cli';
-      claudeDetails = hasLocalClaudeConfig ? 'Detected Claude profile in home directory' : 'Found Claude CLI binary';
+    } catch (err: any) {
+      const out = err.stdout ? String(err.stdout).trim() : '';
+      let isLogged = false;
+      try {
+        const parsed = JSON.parse(out);
+        if (parsed.loggedIn) isLogged = true;
+      } catch (_) {}
+
+      if (isLogged) {
+        claudeAvailable = true;
+        claudeMethod = 'oauth_session';
+        claudeDetails = 'Authenticated session active';
+      } else {
+        claudeAvailable = false;
+        claudeMethod = 'none';
+        claudeDetails = 'Claude session expired or logged out. Run "claude" in terminal to authenticate.';
+      }
     }
   } else if (hasLocalClaudeConfig) {
-    claudeAvailable = true;
+    claudeAvailable = false;
     claudeMethod = 'local_session';
-    claudeDetails = 'Detected Claude config in home directory';
+    claudeDetails = 'Detected Claude config in home directory, but Claude CLI binary not found in PATH';
   }
 
   // Preserve active future reset date (e.g. October 17th weekly reset)
@@ -622,11 +692,11 @@ export async function probeSubscriptionCredentials(): Promise<{
 
   updateSubscription('claude_subscription', {
     connected: claudeAvailable,
-    quota_remaining_pct: claudePct,
+    quota_remaining_pct: claudeAvailable ? claudePct : 0.0,
     resets_at: claudeResetsAt,
     status_message: isClaudeExhaustedWithActiveReset
       ? claudeDetails
-      : (claudeAvailable ? `Connected (${claudeDetails})` : 'Claude CLI / credentials not detected')
+      : (claudeAvailable ? `Connected (${claudeDetails})` : claudeDetails)
   });
 
   // 2. OpenAI Codex Probe
@@ -641,7 +711,7 @@ export async function probeSubscriptionCredentials(): Promise<{
   try {
     const isWin = process.platform === 'win32';
     const cmd = isWin ? 'where codex' : 'which codex';
-    execSync(cmd, { stdio: 'ignore', timeout: 1500 });
+    execSync(cmd, { stdio: 'ignore', timeout: 1500, windowsHide: true });
     codexCliFound = true;
   } catch (_) {}
 
@@ -951,7 +1021,7 @@ export async function probeSubscriptionCredentials(): Promise<{
     try {
       const isWin = process.platform === 'win32';
       const cmd = isWin ? `where ${bin}` : `which ${bin}`;
-      execSync(cmd, { stdio: 'ignore', timeout: 1500 });
+      execSync(cmd, { stdio: 'ignore', timeout: 1500, windowsHide: true });
       vibeAvailable = true;
       vibeBin = bin;
       vibeMethod = 'acp_cli';
@@ -989,7 +1059,7 @@ export async function probeSubscriptionCredentials(): Promise<{
     try {
       const isWin = process.platform === 'win32';
       const cmd = isWin ? `where ${bin}` : `which ${bin}`;
-      execSync(cmd, { stdio: 'ignore', timeout: 1500 });
+      execSync(cmd, { stdio: 'ignore', timeout: 1500, windowsHide: true });
       geminiCliAvailable = true;
       geminiBin = bin;
       geminiCliMethod = 'acp_cli';
@@ -1018,6 +1088,42 @@ export async function probeSubscriptionCredentials(): Promise<{
     status_message: geminiCliAvailable ? `Connected (${geminiCliDetails})` : 'Gemini CLI (gemini) not detected'
   });
 
+  // 12. NVIDIA NIM Direct API Key Probe
+  let nvidiaAvailable = false;
+  let nvidiaMethod = 'none';
+  let nvidiaDetails = 'NVIDIA NIM API Key is not configured (Get free key at https://build.nvidia.com)';
+
+  const nvidiaApiKey = getSetting('NVIDIA_API_KEY', config.nvidiaApiKey);
+  if (nvidiaApiKey && nvidiaApiKey.trim()) {
+    nvidiaMethod = 'api_key';
+    try {
+      const nvRes = await fetch('https://integrate.api.nvidia.com/v1/models', {
+        headers: { 'Authorization': `Bearer ${nvidiaApiKey.trim()}` },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (nvRes.ok) {
+        nvidiaAvailable = true;
+        const nvData: any = await nvRes.json();
+        const count = Array.isArray(nvData.data) ? nvData.data.length : 81;
+        nvidiaDetails = `Direct NVIDIA NIM connected (${count} models available, e.g. Llama 3.3 70B, DeepSeek R1)`;
+      } else if (nvRes.status === 401) {
+        nvidiaDetails = 'Invalid NVIDIA NIM API Key (401 Unauthorized)';
+      } else {
+        nvidiaDetails = `NVIDIA NIM API returned HTTP ${nvRes.status}`;
+      }
+    } catch (err: any) {
+      nvidiaDetails = `Failed to probe NVIDIA NIM: ${err.message}`;
+    }
+  }
+
+  const nvidiaUsage = getProviderUsageStats('nvidia');
+  updateSubscription('nvidia_direct', {
+    connected: nvidiaAvailable,
+    quota_used_tokens: nvidiaUsage.totalTokens,
+    current_balance: nvidiaUsage.totalCost,
+    status_message: nvidiaDetails
+  });
+
   return {
     claude: { available: claudeAvailable, method: claudeMethod, details: claudeDetails, quota_remaining_pct: claudePct },
     codex: { available: codexAvailable, method: codexMethod, details: codexDetails, quota_remaining_pct: currentCodex?.quota_remaining_pct ?? 100.0 },
@@ -1028,6 +1134,7 @@ export async function probeSubscriptionCredentials(): Promise<{
     deepseek: { available: deepseekAvailable, method: deepseekMethod, details: deepseekDetails, quota_remaining_pct: 100.0 },
     anthropic: { available: antDirectAvailable, method: antDirectMethod, details: antDirectDetails, quota_remaining_pct: 100.0 },
     openai: { available: oaiDirectAvailable, method: oaiDirectMethod, details: oaiDirectDetails, quota_remaining_pct: 100.0 },
+    nvidia: { available: nvidiaAvailable, method: nvidiaMethod, details: nvidiaDetails, quota_remaining_pct: 100.0 },
     vibe: { available: vibeAvailable, method: vibeMethod, details: vibeDetails, quota_remaining_pct: currentVibe?.quota_remaining_pct ?? 100.0 },
     gemini_cli: { available: geminiCliAvailable, method: geminiCliMethod, details: geminiCliDetails, quota_remaining_pct: currentGeminiCli?.quota_remaining_pct ?? 100.0 }
   };

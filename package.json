@@ -12,13 +12,13 @@
     "prompt-caching",
     "goose-agent"
   ],
-  "main": "index.js",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node --use-system-ca dist/index.js",
-    "test": "tsx test/test-reporting.ts && tsx test/test-heuristic.ts && tsx test/test-subscriptions.ts"
+    "test": "tsx test/test-reporting.ts && tsx test/test-heuristic.ts && tsx test/test-subscriptions.ts && tsx test/test-next-best-fallback.ts"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

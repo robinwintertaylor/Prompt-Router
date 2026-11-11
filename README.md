@@ -201,13 +201,35 @@ Prompt-Router never steers or constrains Jev's cognitive choice. Instead, once J
 
 ---
 
+## Subdirectories & System Boundaries
+- [src](./src/README.md): Core routing engine, TypeSafe Jev cognitive evaluation, break-even cache affinity, pricing calculations, SQLite persistence, and dispatch execution.
+- [public](./public/README.md): Client-side optics dashboard, real-time HUD metrics, SSE telemetry stream consumer, and interactive routing playground.
+
+## Global Invariants
+- **Jev & Heuristic Fallback**: Evaluates requests via TypeSafe Jev System One in ~120ms; if `TYPESAFE_API_KEY` is omitted or uncontactable, immediately falls back to local regex heuristics in <5ms without blocking completion requests.
+- **Break-Even Cache Affinity**: For active multi-turn sessions with $\ge$ 4,000 context tokens, requests remain anchored on the active model to preserve prompt cache TTL unless switching costs (including anchor re-cache write penalties) are mathematically lower or extreme reasoning is required.
+- **Provider Resiliency**: Dispatches completions across direct vendor credentials -> local ACP subscriptions -> primary aggregator -> secondary aggregator before surfacing errors.
+- **Non-Blocking Observability**: Metric rollups, SQLite logging, and Server-Sent Event telemetry broadcasts are decoupled from chat completion response streaming.
+
+## Global Side Effects
+- **Database & Storage**: Reads and writes `prompt_router.db` SQLite database with WAL journal mode.
+- **Outbound Network**: Dispatches HTTPS requests to TypeSafe API, Anthropic, OpenAI, Mistral, DeepSeek, Google Gemini, NVIDIA NIM, Mammouth AI, and OpenRouter endpoints.
+- **Subprocess Execution**: Spawns local CLI binaries (`claude`, `codex`, `vibe`, `gemini`) via Agent Client Protocol (ACP) for subscription-backed inference.
+- **Network Server**: Binds HTTP and SSE server on port `4000` (configurable via `PORT`).
+
+## System Verification
+- Run: `npm test`
+
+
 ## ⚡ Quickstart & Integrations
 
 ### Prerequisites
 * **Node.js >= 24.0.0** (required for native `node:sqlite` and Web Streams)
 * **npm >= 10.0.0**
 
-### 1. Installation & Start
+### 1. Installation & Start (Local or Docker Desktop)
+
+**Local (Node.js):**
 ```bash
 git clone https://github.com/robinwintertaylor/Prompt-Router.git
 cd Prompt-Router
@@ -215,6 +237,12 @@ npm install
 npm run build
 npm start   # Starts on http://localhost:4000
 ```
+
+**Docker Desktop / Docker Compose:**
+```bash
+docker compose up --build -d
+```
+*Prompt-Router runs on `http://localhost:4000` with automated SQLite self-healing and WAL recovery to ensure clean startups across container reboots.*
 
 ### 2. Configure Credentials (via Dashboard or .env)
 Configure keys either in `.env` or in the dashboard **Settings Modal** (`http://localhost:4000`):
@@ -225,8 +253,9 @@ Configure keys either in `.env` or in the dashboard **Settings Modal** (`http://
 # 1. Non-Autoregressive Decision Engine (Optional - defaults to local heuristic mode)
 TYPESAFE_API_KEY=ts_live_...       # https://typesafe.ai (120ms Jev System One)
 
-# 2. Direct Vendor Accounts (Optional - uses your existing subscriptions)
+# 2. Direct Vendor Accounts & Developer Credits (Optional - uses your existing accounts)
 MISTRAL_API_KEY=...                # https://console.mistral.ai (EU data residency)
+NVIDIA_API_KEY=nvapi-...           # https://build.nvidia.com (1,000 free developer credits)
 ANTHROPIC_API_KEY=...              # https://console.anthropic.com
 OPENAI_API_KEY=...                 # https://platform.openai.com
 DEEPSEEK_API_KEY=...               # https://platform.deepseek.com

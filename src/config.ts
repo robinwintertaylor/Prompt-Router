@@ -1,5 +1,4 @@
 import dotenv from 'dotenv';
-import path from 'path';
 
 dotenv.config();
 
@@ -14,6 +13,7 @@ export interface RouterConfig {
   mistralApiKey: string;
   deepseekApiKey: string;
   geminiApiKey: string;
+  nvidiaApiKey: string;
   routingStrategy: 'cost_optimized' | 'performance_optimized' | 'balanced';
   defaultProvider: 'mammouth' | 'openrouter';
   fallbackModel: string;
@@ -32,6 +32,7 @@ export const config: RouterConfig = {
   mistralApiKey: process.env.MISTRAL_API_KEY || '',
   deepseekApiKey: process.env.DEEPSEEK_API_KEY || '',
   geminiApiKey: process.env.GEMINI_API_KEY || '',
+  nvidiaApiKey: process.env.NVIDIA_API_KEY || '',
   routingStrategy: (process.env.ROUTING_STRATEGY as any) || 'cost_optimized',
   defaultProvider: (process.env.DEFAULT_PROVIDER as any) || 'mammouth',
   fallbackModel: process.env.FALLBACK_MODEL || 'anthropic/claude-3.5-sonnet',

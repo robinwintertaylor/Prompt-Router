@@ -35,6 +35,8 @@ function initApp() {
     fetchSubscriptions();
   });
   document.getElementById('btn-sync-subs')?.addEventListener('click', triggerSyncSubscriptions);
+  document.getElementById('btn-subs-filter-active')?.addEventListener('click', () => updateSubsViewMode('active'));
+  document.getElementById('btn-subs-filter-all')?.addEventListener('click', () => updateSubsViewMode('all'));
 
   document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
   document.getElementById('btn-close-settings').addEventListener('click', closeSettingsModal);
@@ -47,8 +49,15 @@ function initApp() {
   document.getElementById('btn-sync-catalog').addEventListener('click', triggerCatalogSync);
   document.getElementById('btn-modal-sync-catalog').addEventListener('click', triggerCatalogSync);
 
-  document.getElementById('catalog-search').addEventListener('input', () => fetchCatalog());
-  document.getElementById('catalog-tier-filter').addEventListener('change', () => fetchCatalog());
+  document.getElementById('catalog-search').addEventListener('input', () => fetchCatalog(1));
+  document.getElementById('catalog-tier-filter').addEventListener('change', () => fetchCatalog(1));
+  document.getElementById('catalog-provider-filter')?.addEventListener('change', () => fetchCatalog(1));
+  document.getElementById('catalog-prev-page')?.addEventListener('click', () => {
+    if (catalogCurrentPage > 1) fetchCatalog(catalogCurrentPage - 1);
+  });
+  document.getElementById('catalog-next-page')?.addEventListener('click', () => {
+    if (catalogCurrentPage < catalogTotalPages) fetchCatalog(catalogCurrentPage + 1);
+  });
 
   document.getElementById('btn-run-test').addEventListener('click', runPromptTest);
 
@@ -447,21 +456,67 @@ function renderMetrics(data) {
   }
 }
 
+let subsViewMode = localStorage.getItem('prompt_router_subs_view') || 'all';
+let cachedSubscriptions = [];
+
+function updateSubsViewMode(mode) {
+  subsViewMode = mode;
+  localStorage.setItem('prompt_router_subs_view', mode);
+  const btnActive = document.getElementById('btn-subs-filter-active');
+  const btnAll = document.getElementById('btn-subs-filter-all');
+  if (btnActive && btnAll) {
+    if (mode === 'active') {
+      btnActive.style.background = 'var(--gateway-teal-dark, #0891B2)';
+      btnActive.style.color = '#fff';
+      btnAll.style.background = 'transparent';
+      btnAll.style.color = 'var(--text-muted)';
+    } else {
+      btnAll.style.background = 'var(--gateway-teal-dark, #0891B2)';
+      btnAll.style.color = '#fff';
+      btnActive.style.background = 'transparent';
+      btnActive.style.color = 'var(--text-muted)';
+    }
+  }
+  if (cachedSubscriptions.length > 0) {
+    renderSubscriptions(cachedSubscriptions);
+  }
+}
+
 function renderSubscriptions(subs) {
+  cachedSubscriptions = subs || [];
   const container = document.getElementById('subscriptions-container');
   if (!container) return;
 
-  // Only show active and connected providers on the dashboard
-  const displaySubs = (subs || []).filter(s => s.enabled && s.connected);
-
+  const connectedSubs = (subs || []).filter(s => s.enabled && s.connected);
   const badgeConnected = document.getElementById('badge-subs-connected');
   if (badgeConnected) {
-    badgeConnected.textContent = `${displaySubs.length} ACTIVE PROVIDER${displaySubs.length === 1 ? '' : 'S'}`;
-    badgeConnected.className = displaySubs.length > 0 ? 'badge badge-savings' : 'badge badge-warning';
+    badgeConnected.textContent = `${connectedSubs.length} ACTIVE / ${subs.length} PROVIDERS`;
+    badgeConnected.className = connectedSubs.length > 0 ? 'badge badge-savings' : 'badge badge-warning';
   }
 
+  // Sync button styling on load
+  const btnActive = document.getElementById('btn-subs-filter-active');
+  const btnAll = document.getElementById('btn-subs-filter-all');
+  if (btnActive && btnAll) {
+    if (subsViewMode === 'active') {
+      btnActive.style.background = 'var(--gateway-teal-dark, #0891B2)';
+      btnActive.style.color = '#fff';
+      btnAll.style.background = 'transparent';
+      btnAll.style.color = 'var(--text-muted)';
+    } else {
+      btnAll.style.background = 'var(--gateway-teal-dark, #0891B2)';
+      btnAll.style.color = '#fff';
+      btnActive.style.background = 'transparent';
+      btnActive.style.color = 'var(--text-muted)';
+    }
+  }
+
+  const displaySubs = subsViewMode === 'active'
+    ? connectedSubs
+    : (subs || []);
+
   if (displaySubs.length === 0) {
-    container.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-muted);">No connected provider bridges detected. Configure API keys or local ACP CLI sessions in Settings to activate.</div>';
+    container.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-muted);">No connected provider bridges detected. Click "All Providers" or configure keys in Settings.</div>';
     return;
   }
 
@@ -481,8 +536,8 @@ function renderSubscriptions(subs) {
       barColor = 'var(--text-muted)';
       displayPct = 0;
     } else if (!s.connected) {
-      statusBadge = '<span class="badge badge-warning">NOT DETECTED</span>';
-      barColor = 'var(--text-muted)';
+      statusBadge = '<span class="badge" style="background: rgba(148,163,184,0.15); color: #94A3B8; border: 1px solid rgba(148,163,184,0.25);">NOT CONFIGURED</span>';
+      barColor = 'rgba(148,163,184,0.3)';
       displayPct = 0;
     } else if (isPayAsYouGo) {
       statusBadge = '<span class="badge badge-savings">DIRECT API (ACTIVE)</span>';
@@ -522,15 +577,17 @@ function renderSubscriptions(subs) {
       : (s.provider === 'openai' ? '🤖'
       : (s.provider === 'google' ? '✨'
       : (s.provider === 'mistral' ? '🌪️'
+      : (s.provider === 'nvidia' ? '🟢'
       : (s.provider === 'deepseek' ? '🐋'
-      : (s.provider === 'mammouth' ? '🦣' : '🔀')))));
+      : (s.provider === 'mammouth' ? '🦣'
+      : (s.provider === 'openrouter' ? '🌐' : '⚡')))))));
 
     const quotaLabel = isPayAsYouGo ? 'Direct Routed Usage' : (isDollar ? 'Remaining Balance' : 'Remaining Free Quota');
     let amountText = '';
     if (isPayAsYouGo) {
       amountText = isConnected
         ? `${Number(s.quota_used_tokens || 0).toLocaleString()} toks ($${(Number(s.current_balance ?? 0)).toFixed(4)} spent)`
-        : 'Key not configured';
+        : 'API key required';
     } else if (isDollar) {
       amountText = `$${(Number(s.current_balance ?? 0)).toFixed(2)} / $${(Number(s.max_balance ?? 0)).toFixed(2)}`;
     } else {
@@ -563,8 +620,9 @@ function renderSubscriptions(subs) {
           </div>
         </div>
 
-        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); font-size: 11px; color: var(--text-muted); line-height: 1.3;">
-          ${escapeHtml(s.status_message || '')}
+        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); font-size: 11px; color: var(--text-muted); line-height: 1.3; display: flex; justify-content: space-between; align-items: center;">
+          <span>${escapeHtml(s.status_message || '')}</span>
+          ${!isConnected ? `<button onclick="openSettingsModal()" class="btn btn-secondary btn-sm" style="font-size: 10px; padding: 2px 7px; margin-left: 6px; white-space: nowrap; flex-shrink: 0;">⚙️ Configure</button>` : ''}
         </div>
       </div>
     `;
@@ -937,6 +995,7 @@ async function fetchSettings() {
     if (data.mistralKeyMasked) document.getElementById('input-mistral-key').placeholder = data.mistralKeyMasked;
     if (data.deepseekKeyMasked) document.getElementById('input-deepseek-key').placeholder = data.deepseekKeyMasked;
     if (data.geminiKeyMasked) document.getElementById('input-gemini-key').placeholder = data.geminiKeyMasked;
+    if (data.nvidiaKeyMasked && document.getElementById('input-nvidia-key')) document.getElementById('input-nvidia-key').placeholder = data.nvidiaKeyMasked;
     if (data.routingStrategy) document.getElementById('select-strategy').value = data.routingStrategy;
     if (data.defaultProvider) document.getElementById('select-provider').value = data.defaultProvider;
 
@@ -992,6 +1051,7 @@ async function saveSettings() {
   const mistralApiKey = document.getElementById('input-mistral-key').value;
   const deepseekApiKey = document.getElementById('input-deepseek-key').value;
   const geminiApiKey = document.getElementById('input-gemini-key').value;
+  const nvidiaApiKey = document.getElementById('input-nvidia-key')?.value;
   const routingStrategy = document.getElementById('select-strategy').value;
   const defaultProvider = document.getElementById('select-provider').value;
   const subClaudeVal = document.getElementById('select-sub-claude')?.value;
@@ -1008,6 +1068,7 @@ async function saveSettings() {
   if (mistralApiKey) payload.mistralApiKey = mistralApiKey;
   if (deepseekApiKey) payload.deepseekApiKey = deepseekApiKey;
   if (geminiApiKey) payload.geminiApiKey = geminiApiKey;
+  if (nvidiaApiKey) payload.nvidiaApiKey = nvidiaApiKey;
 
   try {
     const res = await fetch('/api/settings', {
@@ -1082,14 +1143,21 @@ function escapeHtml(str) {
 }
 
 
-async function fetchCatalog() {
+let catalogCurrentPage = 1;
+let catalogTotalPages = 1;
+
+async function fetchCatalog(page = 1) {
   try {
+    catalogCurrentPage = Math.max(1, page);
     const search = document.getElementById('catalog-search')?.value || '';
     const tier = document.getElementById('catalog-tier-filter')?.value || 'all';
+    const provider = document.getElementById('catalog-provider-filter')?.value || 'all';
 
-    const res = await fetch(`/api/catalog?search=${encodeURIComponent(search)}&tier=${tier}`);
+    const res = await fetch(`/api/catalog?search=${encodeURIComponent(search)}&tier=${tier}&provider=${provider}&page=${catalogCurrentPage}&limit=50`);
     if (!res.ok) return;
     const data = await res.json();
+
+    catalogTotalPages = data.totalPages || 1;
 
     const countDisplay = document.getElementById('catalog-count-display');
     if (countDisplay) countDisplay.textContent = data.total;
@@ -1106,10 +1174,23 @@ async function fetchCatalog() {
 function renderCatalogTable(data) {
   const tbody = document.getElementById('catalog-table-body');
   const summary = document.getElementById('catalog-modal-summary');
+  const pageIndicator = document.getElementById('catalog-page-indicator');
+  const prevBtn = document.getElementById('catalog-prev-page');
+  const nextBtn = document.getElementById('catalog-next-page');
   if (!tbody) return;
 
   if (summary) {
-    summary.textContent = `Showing ${data.filteredCount} of ${data.total} synchronized models`;
+    summary.textContent = `Showing ${data.models?.length || 0} of ${data.filteredCount} models (${data.total} total synchronized)`;
+  }
+
+  if (pageIndicator) {
+    pageIndicator.textContent = `Page ${data.page || 1} of ${data.totalPages || 1}`;
+  }
+  if (prevBtn) {
+    prevBtn.disabled = (data.page || 1) <= 1;
+  }
+  if (nextBtn) {
+    nextBtn.disabled = (data.page || 1) >= (data.totalPages || 1);
   }
 
   if (!data.models || data.models.length === 0) {
@@ -1128,9 +1209,7 @@ function renderCatalogTable(data) {
     const promptPriceMTok = (m.promptPrice * 1_000_000).toFixed(3);
     const completionPriceMTok = (m.completionPrice * 1_000_000).toFixed(3);
     const tierBadge = getTierBadge(m.tier);
-    const providerBadge = m.provider === 'both'
-      ? '<span class="badge badge-savings">Mammouth &amp; OR</span>'
-      : (m.provider === 'mammouth' ? '<span class="badge badge-savings">Mammouth</span>' : '<span class="badge badge-gateway">OpenRouter</span>');
+    const providerBadge = getProviderBadge(m.provider);
 
     html += `
       <tr>
@@ -1147,6 +1226,25 @@ function renderCatalogTable(data) {
     `;
   }
   tbody.innerHTML = html;
+}
+
+function getProviderBadge(provider) {
+  switch (provider) {
+    case 'both':
+      return '<span class="badge" style="background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3);">Multi-Provider</span>';
+    case 'mammouth':
+      return '<span class="badge" style="background: rgba(139,92,246,0.15); color: #8B5CF6; border: 1px solid rgba(139,92,246,0.3);">Mammouth AI</span>';
+    case 'nvidia':
+      return '<span class="badge" style="background: rgba(118,185,0,0.15); color: #76B900; border: 1px solid rgba(118,185,0,0.3);">NVIDIA NIM</span>';
+    case 'mistral':
+      return '<span class="badge" style="background: rgba(249,115,22,0.15); color: #F97316; border: 1px solid rgba(249,115,22,0.3);">Mistral AI</span>';
+    case 'deepseek':
+      return '<span class="badge" style="background: rgba(59,130,246,0.15); color: #3B82F6; border: 1px solid rgba(59,130,246,0.3);">DeepSeek</span>';
+    case 'openrouter':
+      return '<span class="badge badge-gateway" style="background: rgba(6,182,212,0.15); color: #06B6D4; border: 1px solid rgba(6,182,212,0.3);">OpenRouter</span>';
+    default:
+      return `<span class="badge badge-gateway">${escapeHtml(provider || 'Unknown')}</span>`;
+  }
 }
 
 function getTierBadge(tier) {

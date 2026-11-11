@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
 import { getMetrics, getRecentLogs, getSetting, setSetting, getDetailedReport, getLogById, ReportFilters } from '../db.js';
 import { evaluateWithJev } from '../jev.js';
-import { selectOptimalModel, executeRoutedCompletion } from '../router.js';
+import { executeRoutedCompletion } from '../router.js';
 import { calculateCosts } from '../pricing.js';
 import { config } from '../config.js';
 import { getAllCatalogModels, syncCatalog } from '../catalog.js';
@@ -291,6 +290,7 @@ export function handleGetSettings(req: Request, res: Response) {
   const mistralKey = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
   const deepseekKey = getSetting('DEEPSEEK_API_KEY', config.deepseekApiKey);
   const geminiKey = getSetting('GEMINI_API_KEY', config.geminiApiKey);
+  const nvidiaKey = getSetting('NVIDIA_API_KEY', config.nvidiaApiKey);
 
   res.json({
     hasTypesafeKey: !!(typesafeKey && typesafeKey.trim()),
@@ -301,6 +301,7 @@ export function handleGetSettings(req: Request, res: Response) {
     hasMistralKey: !!(mistralKey && mistralKey.trim()),
     hasDeepseekKey: !!(deepseekKey && deepseekKey.trim()),
     hasGeminiKey: !!(geminiKey && geminiKey.trim()),
+    hasNvidiaKey: !!(nvidiaKey && nvidiaKey.trim()),
     typesafeKeyMasked: typesafeKey ? typesafeKey.slice(0, 4) + '...' + typesafeKey.slice(-4) : '',
     mammouthKeyMasked: mammouthKey ? mammouthKey.slice(0, 4) + '...' + mammouthKey.slice(-4) : '',
     openrouterKeyMasked: openrouterKey ? openrouterKey.slice(0, 4) + '...' + openrouterKey.slice(-4) : '',
@@ -309,6 +310,7 @@ export function handleGetSettings(req: Request, res: Response) {
     mistralKeyMasked: mistralKey ? mistralKey.slice(0, 4) + '...' + mistralKey.slice(-4) : '',
     deepseekKeyMasked: deepseekKey ? deepseekKey.slice(0, 4) + '...' + deepseekKey.slice(-4) : '',
     geminiKeyMasked: geminiKey ? geminiKey.slice(0, 4) + '...' + geminiKey.slice(-4) : '',
+    nvidiaKeyMasked: nvidiaKey ? nvidiaKey.slice(0, 4) + '...' + nvidiaKey.slice(-4) : '',
     routingStrategy: getSetting('ROUTING_STRATEGY', config.routingStrategy),
     defaultProvider: getSetting('DEFAULT_PROVIDER', config.defaultProvider),
     port: config.port
@@ -325,6 +327,7 @@ export function handleUpdateSettings(req: Request, res: Response) {
     mistralApiKey,
     deepseekApiKey,
     geminiApiKey,
+    nvidiaApiKey,
     routingStrategy,
     defaultProvider
   } = req.body;
@@ -353,6 +356,9 @@ export function handleUpdateSettings(req: Request, res: Response) {
   if (geminiApiKey !== undefined && geminiApiKey !== null) {
     setSetting('GEMINI_API_KEY', geminiApiKey.trim());
   }
+  if (nvidiaApiKey !== undefined && nvidiaApiKey !== null) {
+    setSetting('NVIDIA_API_KEY', nvidiaApiKey.trim());
+  }
   if (routingStrategy) {
     setSetting('ROUTING_STRATEGY', routingStrategy);
   }
@@ -372,6 +378,8 @@ export function handleGetCatalog(req: Request, res: Response) {
     const search = ((req.query.search as string) || '').toLowerCase();
     const tier = req.query.tier as string;
     const provider = req.query.provider as string;
+    const page = Math.max(parseInt(req.query.page as string || '1', 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string || '50', 10), 1), 500);
 
     const allModels = getAllCatalogModels();
 
@@ -390,10 +398,25 @@ export function handleGetCatalog(req: Request, res: Response) {
       filtered = filtered.filter(m => m.provider === provider || m.provider === 'both');
     }
 
+    // Sort alphabetically by ID so models from all providers are distributed
+    filtered.sort((a, b) => a.id.localeCompare(b.id));
+
+    const providersSummary: Record<string, number> = { all: allModels.length };
+    for (const m of allModels) {
+      providersSummary[m.provider] = (providersSummary[m.provider] || 0) + 1;
+    }
+
+    const offset = (page - 1) * limit;
+    const pagedModels = filtered.slice(offset, offset + limit);
+
     res.json({
       total: allModels.length,
       filteredCount: filtered.length,
-      models: filtered.slice(0, 100) // cap to 100 per query
+      page,
+      limit,
+      totalPages: Math.ceil(filtered.length / limit) || 1,
+      providersSummary,
+      models: pagedModels
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

@@ -1,0 +1,8 @@
+node_modules
+dist
+.git
+.gitignore
+*.log
+0.26.0
+scripts
+test

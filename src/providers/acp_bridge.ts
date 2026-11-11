@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { Readable } from 'stream';
-import { getSubscription, recordSubscriptionUsage } from '../subscriptions.js';
+import { getSubscription, recordSubscriptionUsage, updateSubscription } from '../subscriptions.js';
 import { getSetting } from '../db.js';
 import { config } from '../config.js';
 
@@ -116,42 +116,44 @@ export async function callAcpBridge(
       if (systemMsg?.content) {
         args.push('--system-prompt', typeof systemMsg.content === 'string' ? systemMsg.content : JSON.stringify(systemMsg.content));
       }
-      args.push(promptText);
     } else if (subId === 'mistral_vibe') {
-      // Mistral Vibe accepts -p / --prompt for non-interactive prompt execution
-      args.push('-p', promptText);
+      // Mistral Vibe programmatic mode: read prompt from stdin
+      args.push('-p', '--trust');
     } else if (subId === 'gemini_cli' || subId === 'gemini_free') {
-      // Google Gemini CLI accepts -p / --prompt
-      args.push('-p', promptText);
+      // Google Gemini CLI
+      args.push('-p');
     } else {
-      args.push('exec', promptText);
+      args.push('exec');
     }
-
-    const isWin = process.platform === 'win32';
-    // For Windows cmd execution, ensure arguments with spaces are safely quoted
-    const safeArgs = isWin
-      ? args.map(arg => {
-          if (typeof arg === 'string' && (arg.includes(' ') || arg.includes('\n')) && !arg.startsWith('"')) {
-            return `"${arg.replace(/"/g, '\\"')}"`;
-          }
-          return arg;
-        })
-      : args;
 
     try {
       const mistralKey = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
       const geminiKey = getSetting('GEMINI_API_KEY', config.geminiApiKey);
 
-      const child = spawn(cliBinary, safeArgs, {
-        shell: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
+      const isWin = process.platform === 'win32';
+      const isBatchScript = isWin && (cliBinary.toLowerCase().endsWith('.cmd') || cliBinary.toLowerCase().endsWith('.bat'));
+      const child = spawn(cliBinary, args, {
+        shell: isBatchScript,
+        windowsHide: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
+          PYTHONIOENCODING: 'utf-8',
+          PYTHONUTF8: '1',
           ...(sub.session_token ? { ACP_SESSION_TOKEN: sub.session_token } : {}),
           ...(subId === 'mistral_vibe' && mistralKey ? { MISTRAL_API_KEY: mistralKey.trim(), VIBE_API_KEY: mistralKey.trim() } : {}),
           ...((subId === 'gemini_cli' || subId === 'gemini_free') && geminiKey ? { GEMINI_API_KEY: geminiKey.trim() } : {})
         }
       });
+
+      // Write prompt via stdin to avoid command line length limits and escaping bugs on Windows
+      if (child.stdin) {
+        child.stdin.write(promptText, 'utf8', (err) => {
+          if (!err) {
+            try { child.stdin.end(); } catch (_) {}
+          }
+        });
+      }
 
       const timeout = setTimeout(() => {
         if (!resolved) {
@@ -194,6 +196,32 @@ export async function callAcpBridge(
 
         const lowerStderr = stderrBuffer.toLowerCase();
         const lowerStdout = stdoutBuffer.toLowerCase();
+
+        // Check for authentication failures or expired sessions
+        if (
+          lowerStderr.includes('oauth session expired') ||
+          lowerStdout.includes('oauth session expired') ||
+          lowerStderr.includes('failed to authenticate') ||
+          lowerStdout.includes('failed to authenticate') ||
+          lowerStderr.includes('ineligibletiererror') ||
+          lowerStdout.includes('ineligibletiererror') ||
+          lowerStderr.includes('unsupported_client') ||
+          lowerStdout.includes('unsupported_client')
+        ) {
+          const authMsg = `${sub.name} authentication expired or unavailable: ${(stderrBuffer || stdoutBuffer).trim().slice(0, 150)}`;
+          updateSubscription(subId, {
+            connected: false,
+            quota_remaining_pct: 0,
+            status_message: authMsg
+          });
+          return resolve({
+            ok: false,
+            status: 401,
+            error: `Subscription ACP authentication failed: ${authMsg}`,
+            provider: providerKey,
+            quotaExhausted: true
+          });
+        }
 
         if (
           lowerStderr.includes('rate limit') ||
