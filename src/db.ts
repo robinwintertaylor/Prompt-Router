@@ -2,14 +2,87 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 
-const DB_PATH = path.resolve(process.cwd(), 'prompt_router.db');
-export const db = new DatabaseSync(DB_PATH);
+export const DB_PATH = process.env.DB_PATH || process.env.DATABASE_PATH
+  ? path.resolve(process.env.DB_PATH || process.env.DATABASE_PATH!)
+  : path.resolve(process.cwd(), 'prompt_router.db');
 
-// Enable WAL mode and busy timeout for high-concurrency non-blocking access
-try {
-  db.exec('PRAGMA journal_mode = WAL;');
-  db.exec('PRAGMA busy_timeout = 5000;');
-} catch (_) {}
+function openDatabaseWithRecovery(targetPath: string): DatabaseSync {
+  const dir = path.dirname(targetPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  function openAndVerify(filePath: string): DatabaseSync {
+    const conn = new DatabaseSync(filePath);
+    try {
+      const journalMode = process.env.SQLITE_JOURNAL_MODE || 'WAL';
+      conn.exec(`PRAGMA journal_mode = ${journalMode};`);
+      conn.exec('PRAGMA busy_timeout = 5000;');
+      // Quick integrity check to detect corrupt/mismatched WAL or corrupted pages early
+      conn.exec('PRAGMA quick_check;');
+    } catch (err: any) {
+      try { conn.close(); } catch (_) {}
+      throw err;
+    }
+    return conn;
+  }
+
+  try {
+    return openAndVerify(targetPath);
+  } catch (err: any) {
+    const isMalformed =
+      err?.code === 'ERR_SQLITE_ERROR' &&
+      (err?.errcode === 11 || String(err?.message || '').toLowerCase().includes('malformed'));
+
+    if (!isMalformed) {
+      throw err;
+    }
+
+    console.warn(`⚠️ [DB] Malformed database or stale WAL detected at "${targetPath}": ${err.message}. Initiating auto-recovery...`);
+
+    const walPath = `${targetPath}-wal`;
+    const shmPath = `${targetPath}-shm`;
+
+    // Phase 1: In Docker / single-file bind mounts, stale/orphaned -wal or -shm files from an unclean shutdown
+    // or container restart with an updated host file causes SQLite error 11.
+    // Removing the mismatched WAL/SHM auxiliary files allows SQLite to cleanly open the main DB.
+    if (fs.existsSync(walPath) || fs.existsSync(shmPath)) {
+      try {
+        const timestamp = Date.now();
+        if (fs.existsSync(walPath)) {
+          fs.renameSync(walPath, `${walPath}.corrupt.${timestamp}`);
+        }
+        if (fs.existsSync(shmPath)) {
+          fs.renameSync(shmPath, `${shmPath}.corrupt.${timestamp}`);
+        }
+        console.warn(`[DB] Cleared mismatched WAL/SHM auxiliary files. Retrying database open...`);
+        const conn = openAndVerify(targetPath);
+        console.log(`✅ [DB] Successfully recovered database after clearing stale WAL auxiliary files!`);
+        return conn;
+      } catch (walErr: any) {
+        console.warn(`[DB] Recovery via WAL clearance did not resolve corruption: ${walErr.message}`);
+      }
+    }
+
+    // Phase 2: If the database file itself is corrupt, backup the corrupt file and recreate a fresh clean database
+    try {
+      const timestamp = Date.now();
+      const corruptBackup = `${targetPath}.corrupt.${timestamp}`;
+      if (fs.existsSync(targetPath)) {
+        fs.renameSync(targetPath, corruptBackup);
+        console.warn(`⚠️ [DB] Corrupt database file backed up to "${corruptBackup}". Recreating clean database.`);
+      }
+      const conn = openAndVerify(targetPath);
+      console.log(`✅ [DB] Successfully initialized clean database.`);
+      return conn;
+    } catch (recreateErr: any) {
+      console.error(`🚨 [DB] Fatal: Failed to recreate clean database:`, recreateErr);
+      throw recreateErr;
+    }
+  }
+}
+
+export const db = openDatabaseWithRecovery(DB_PATH);
 
 // Initialize schema
 export function initDatabase() {
@@ -81,13 +154,19 @@ export function initDatabase() {
       quota_remaining_pct REAL DEFAULT 100.0,
       resets_at INTEGER,
       last_checked INTEGER,
-      status_message TEXT
+      status_message TEXT,
+      quota_unit TEXT DEFAULT 'tokens',
+      current_balance REAL DEFAULT 0.0,
+      max_balance REAL DEFAULT 0.0
     );
   `);
 
   // Safe incremental schema migrations
   try { db.exec('ALTER TABLE requests_log ADD COLUMN routing_reason TEXT;'); } catch (_) {}
   try { db.exec('ALTER TABLE requests_log ADD COLUMN response_preview TEXT;'); } catch (_) {}
+  try { db.exec("ALTER TABLE subscriptions ADD COLUMN quota_unit TEXT DEFAULT 'tokens';"); } catch (_) {}
+  try { db.exec("ALTER TABLE subscriptions ADD COLUMN current_balance REAL DEFAULT 0.0;"); } catch (_) {}
+  try { db.exec("ALTER TABLE subscriptions ADD COLUMN max_balance REAL DEFAULT 0.0;"); } catch (_) {}
 }
 
 export interface RequestLogEntry {

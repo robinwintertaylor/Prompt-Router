@@ -48,6 +48,21 @@ export const FALLBACK_MODEL_PRICES: Record<string, ModelPrice> = {
     inputPerMillion: 0.55,
     outputPerMillion: 2.19,
     displayName: 'DeepSeek R1'
+  },
+  'mistralai/mistral-large-latest': {
+    inputPerMillion: 2.00,
+    outputPerMillion: 6.00,
+    displayName: 'Mistral Large'
+  },
+  'mistralai/codestral-latest': {
+    inputPerMillion: 0.30,
+    outputPerMillion: 0.90,
+    displayName: 'Codestral'
+  },
+  'mistralai/mistral-small': {
+    inputPerMillion: 0.10,
+    outputPerMillion: 0.30,
+    displayName: 'Mistral Small'
   }
 };
 
@@ -70,6 +85,8 @@ export function normalizeModelName(rawModel: string): string {
   if (m.includes('deepseek')) return 'deepseek/deepseek-chat';
   if (m.includes('gemini') && m.includes('flash')) return 'google/gemini-2.5-flash';
   if (m.includes('gemini')) return 'google/gemini-2.5-pro';
+  if (m.includes('mistral-large') || m.includes('mistral-large-latest')) return 'mistralai/mistral-large-latest';
+  if (m.includes('codestral')) return 'mistralai/codestral-latest';
   if (m.includes('mistral-small')) return 'mistralai/mistral-small';
   return rawModel;
 }

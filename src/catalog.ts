@@ -5,7 +5,7 @@ export interface CatalogModel {
   id: string;
   name: string;
   description: string;
-  provider: 'openrouter' | 'mammouth' | 'both';
+  provider: 'openrouter' | 'mammouth' | 'both' | 'nvidia' | 'mistral' | 'deepseek' | string;
   promptPrice: number;       // USD per token
   completionPrice: number;   // USD per token
   contextLength: number;
@@ -16,6 +16,23 @@ export interface CatalogModel {
 
 // In-memory fast cache for high-throughput routing
 let memoryCatalog: Map<string, CatalogModel> = new Map();
+
+function findMatchingModel(catalog: Map<string, CatalogModel>, id: string): CatalogModel | undefined {
+  if (catalog.has(id)) return catalog.get(id);
+  const prefixes = ['openai/', 'anthropic/', 'mistralai/', 'meta-llama/', 'google/', 'deepseek/', 'qwen/', 'meta/'];
+  for (const p of prefixes) {
+    if (catalog.has(p + id)) return catalog.get(p + id);
+  }
+  const slashIdx = id.indexOf('/');
+  if (slashIdx !== -1) {
+    const stripped = id.slice(slashIdx + 1);
+    if (catalog.has(stripped)) return catalog.get(stripped);
+    for (const p of prefixes) {
+      if (catalog.has(p + stripped)) return catalog.get(p + stripped);
+    }
+  }
+  return undefined;
+}
 
 export function classifyModelTier(id: string, name: string, description: string, promptPrice: number, supportsReasoning: boolean): CatalogModel['tier'] {
   const lower = (id + ' ' + name + ' ' + description).toLowerCase();
@@ -53,7 +70,8 @@ export function classifyModelTier(id: string, name: string, description: string,
     lower.includes('opus') ||
     lower.includes('gemini-1.5-pro') ||
     lower.includes('gemini-2.5-pro') ||
-    lower.includes('mistral-large')
+    lower.includes('mistral-large') ||
+    lower.includes('codestral')
   ) {
     return 'frontier_coding';
   }
@@ -136,17 +154,19 @@ export async function syncCatalog(): Promise<{ count: number; error?: string }> 
           let mamAdded = 0;
           for (const mm of mamModels) {
             const modelId = mm.id;
-            const existing = newCatalog.get(modelId);
+            const existing = findMatchingModel(newCatalog, modelId);
             if (existing) {
               existing.provider = 'both';
-              db.prepare(`UPDATE models_catalog SET provider = 'both' WHERE id = ?`).run(modelId);
-            } else {
+              db.prepare(`UPDATE models_catalog SET provider = 'both' WHERE id = ?`).run(existing.id);
+            }
+            if (!newCatalog.has(modelId)) {
               const tier = classifyModelTier(modelId, mm.name || modelId, '', 0.000001, modelId.includes('r1') || modelId.includes('reason'));
+              const provider = existing ? 'both' : 'mammouth';
               insertStmt.run(
                 modelId,
                 mm.name || modelId,
                 'Mammouth AI direct model',
-                'mammouth',
+                provider,
                 0.000001,
                 0.000002,
                 mm.max_input_tokens || 128000,
@@ -158,7 +178,7 @@ export async function syncCatalog(): Promise<{ count: number; error?: string }> 
                 id: modelId,
                 name: mm.name || modelId,
                 description: 'Mammouth AI direct model',
-                provider: 'mammouth',
+                provider,
                 promptPrice: 0.000001,
                 completionPrice: 0.000002,
                 contextLength: mm.max_input_tokens || 128000,
@@ -174,6 +194,131 @@ export async function syncCatalog(): Promise<{ count: number; error?: string }> 
         }
       } catch (mamErr: any) {
         console.warn('[Catalog] Mammouth models fetch error:', mamErr.message);
+      }
+    }
+
+    // 3. Fetch from NVIDIA NIM Catalog
+    try {
+      const nvRes = await fetch('https://integrate.api.nvidia.com/v1/models', {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (nvRes.ok) {
+        const nvData: any = await nvRes.json();
+        const nvModels = nvData.data || [];
+        const insertStmt = db.prepare(`
+          INSERT OR REPLACE INTO models_catalog (
+            id, name, description, provider, prompt_price, completion_price,
+            context_length, supports_reasoning, tier, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `);
+
+        let nvAdded = 0;
+        for (const nm of nvModels) {
+          const modelId = nm.id;
+          const existing = findMatchingModel(newCatalog, modelId);
+          if (existing && existing.provider === 'openrouter') {
+            existing.provider = 'both';
+            db.prepare(`UPDATE models_catalog SET provider = 'both' WHERE id = ?`).run(existing.id);
+          }
+          if (!newCatalog.has(modelId)) {
+            const tier = classifyModelTier(modelId, nm.id, '', 0.0, modelId.includes('r1') || modelId.includes('reason') || modelId.includes('nemotron'));
+            const provider = existing ? 'both' : 'nvidia';
+            insertStmt.run(
+              modelId,
+              modelId,
+              'NVIDIA NIM Direct Inference Model',
+              provider,
+              0.0,
+              0.0,
+              128000,
+              tier === 'frontier_reasoning' ? 1 : 0,
+              tier
+            );
+
+            newCatalog.set(modelId, {
+              id: modelId,
+              name: modelId,
+              description: 'NVIDIA NIM Direct Inference Model',
+              provider,
+              promptPrice: 0.0,
+              completionPrice: 0.0,
+              contextLength: 128000,
+              supportsReasoning: tier === 'frontier_reasoning',
+              tier,
+              updatedAt: new Date().toISOString()
+            });
+            syncedCount++;
+            nvAdded++;
+          }
+        }
+        console.log(`[Catalog] Ingested ${nvAdded} models from NVIDIA NIM.`);
+      }
+    } catch (nvErr: any) {
+      console.warn('[Catalog] NVIDIA NIM models fetch error:', nvErr.message);
+    }
+
+    // 4. Fetch from Mistral AI Catalog if API key is present
+    const mistralApiKey = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
+    if (mistralApiKey && mistralApiKey.trim() !== '') {
+      try {
+        console.log('[Catalog] Fetching live models from Mistral AI...');
+        const misRes = await fetch('https://api.mistral.ai/v1/models', {
+          headers: { 'Authorization': `Bearer ${mistralApiKey.trim()}` },
+          signal: AbortSignal.timeout(5000)
+        });
+        if (misRes.ok) {
+          const misData: any = await misRes.json();
+          const misModels = misData.data || [];
+          const insertStmt = db.prepare(`
+            INSERT OR REPLACE INTO models_catalog (
+              id, name, description, provider, prompt_price, completion_price,
+              context_length, supports_reasoning, tier, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `);
+
+          let misAdded = 0;
+          for (const mm of misModels) {
+            const modelId = mm.id;
+            const existing = findMatchingModel(newCatalog, modelId);
+            if (existing && existing.provider === 'openrouter') {
+              existing.provider = 'both';
+              db.prepare(`UPDATE models_catalog SET provider = 'both' WHERE id = ?`).run(existing.id);
+            }
+            if (!newCatalog.has(modelId)) {
+              const tier = classifyModelTier(modelId, mm.name || modelId, mm.description || '', 0.000002, modelId.includes('large') || modelId.includes('codestral'));
+              const provider = existing ? 'both' : 'mistral';
+              insertStmt.run(
+                modelId,
+                mm.name || modelId,
+                mm.description || 'Mistral AI direct sovereign model',
+                provider,
+                0.000002,
+                0.000006,
+                mm.max_context_length || 128000,
+                tier === 'frontier_reasoning' ? 1 : 0,
+                tier
+              );
+
+              newCatalog.set(modelId, {
+                id: modelId,
+                name: mm.name || modelId,
+                description: mm.description || 'Mistral AI direct sovereign model',
+                provider,
+                promptPrice: 0.000002,
+                completionPrice: 0.000006,
+                contextLength: mm.max_context_length || 128000,
+                supportsReasoning: tier === 'frontier_reasoning',
+                tier,
+                updatedAt: new Date().toISOString()
+              });
+              syncedCount++;
+              misAdded++;
+            }
+          }
+          console.log(`[Catalog] Ingested ${misAdded} new models from Mistral AI (${misModels.length} total).`);
+        }
+      } catch (misErr: any) {
+        console.warn('[Catalog] Mistral models fetch error:', misErr.message);
       }
     }
 

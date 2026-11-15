@@ -35,6 +35,8 @@ function initApp() {
     fetchSubscriptions();
   });
   document.getElementById('btn-sync-subs')?.addEventListener('click', triggerSyncSubscriptions);
+  document.getElementById('btn-subs-filter-active')?.addEventListener('click', () => updateSubsViewMode('active'));
+  document.getElementById('btn-subs-filter-all')?.addEventListener('click', () => updateSubsViewMode('all'));
 
   document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
   document.getElementById('btn-close-settings').addEventListener('click', closeSettingsModal);
@@ -47,8 +49,15 @@ function initApp() {
   document.getElementById('btn-sync-catalog').addEventListener('click', triggerCatalogSync);
   document.getElementById('btn-modal-sync-catalog').addEventListener('click', triggerCatalogSync);
 
-  document.getElementById('catalog-search').addEventListener('input', () => fetchCatalog());
-  document.getElementById('catalog-tier-filter').addEventListener('change', () => fetchCatalog());
+  document.getElementById('catalog-search').addEventListener('input', () => fetchCatalog(1));
+  document.getElementById('catalog-tier-filter').addEventListener('change', () => fetchCatalog(1));
+  document.getElementById('catalog-provider-filter')?.addEventListener('change', () => fetchCatalog(1));
+  document.getElementById('catalog-prev-page')?.addEventListener('click', () => {
+    if (catalogCurrentPage > 1) fetchCatalog(catalogCurrentPage - 1);
+  });
+  document.getElementById('catalog-next-page')?.addEventListener('click', () => {
+    if (catalogCurrentPage < catalogTotalPages) fetchCatalog(catalogCurrentPage + 1);
+  });
 
   document.getElementById('btn-run-test').addEventListener('click', runPromptTest);
 
@@ -447,49 +456,115 @@ function renderMetrics(data) {
   }
 }
 
+let subsViewMode = localStorage.getItem('prompt_router_subs_view') || 'all';
+let cachedSubscriptions = [];
+
+function updateSubsViewMode(mode) {
+  subsViewMode = mode;
+  localStorage.setItem('prompt_router_subs_view', mode);
+  const btnActive = document.getElementById('btn-subs-filter-active');
+  const btnAll = document.getElementById('btn-subs-filter-all');
+  if (btnActive && btnAll) {
+    if (mode === 'active') {
+      btnActive.style.background = 'var(--gateway-teal-dark, #0891B2)';
+      btnActive.style.color = '#fff';
+      btnAll.style.background = 'transparent';
+      btnAll.style.color = 'var(--text-muted)';
+    } else {
+      btnAll.style.background = 'var(--gateway-teal-dark, #0891B2)';
+      btnAll.style.color = '#fff';
+      btnActive.style.background = 'transparent';
+      btnActive.style.color = 'var(--text-muted)';
+    }
+  }
+  if (cachedSubscriptions.length > 0) {
+    renderSubscriptions(cachedSubscriptions);
+  }
+}
+
 function renderSubscriptions(subs) {
+  cachedSubscriptions = subs || [];
   const container = document.getElementById('subscriptions-container');
   if (!container) return;
-  if (!subs || subs.length === 0) {
-    container.innerHTML = '<div class="empty-state">No subscription bridges configured.</div>';
+
+  const connectedSubs = (subs || []).filter(s => s.enabled && s.connected);
+  const badgeConnected = document.getElementById('badge-subs-connected');
+  if (badgeConnected) {
+    badgeConnected.textContent = `${connectedSubs.length} ACTIVE / ${subs.length} PROVIDERS`;
+    badgeConnected.className = connectedSubs.length > 0 ? 'badge badge-savings' : 'badge badge-warning';
+  }
+
+  // Sync button styling on load
+  const btnActive = document.getElementById('btn-subs-filter-active');
+  const btnAll = document.getElementById('btn-subs-filter-all');
+  if (btnActive && btnAll) {
+    if (subsViewMode === 'active') {
+      btnActive.style.background = 'var(--gateway-teal-dark, #0891B2)';
+      btnActive.style.color = '#fff';
+      btnAll.style.background = 'transparent';
+      btnAll.style.color = 'var(--text-muted)';
+    } else {
+      btnAll.style.background = 'var(--gateway-teal-dark, #0891B2)';
+      btnAll.style.color = '#fff';
+      btnActive.style.background = 'transparent';
+      btnActive.style.color = 'var(--text-muted)';
+    }
+  }
+
+  const displaySubs = subsViewMode === 'active'
+    ? connectedSubs
+    : (subs || []);
+
+  if (displaySubs.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-muted);">No connected provider bridges detected. Click "All Providers" or configure keys in Settings.</div>';
     return;
   }
 
-  const badgeConnected = document.getElementById('badge-subs-connected');
-  const connectedCount = subs.filter(s => s.enabled && s.connected).length;
-  if (badgeConnected) {
-    badgeConnected.textContent = `${connectedCount} ACTIVE / ${subs.length} BRIDGES`;
-    badgeConnected.className = connectedCount > 0 ? 'badge badge-savings' : 'badge badge-warning';
-  }
-
   let html = '';
-  for (const s of subs) {
+  for (const s of displaySubs) {
     const isConnected = s.enabled && s.connected;
-    const quotaPct = Math.max(0, Math.min(100, Number(s.quota_remaining_pct || 100)));
+    const isDollar = s.quota_unit === 'usd' || s.provider === 'mammouth' || s.provider === 'openrouter';
+    const isPayAsYouGo = s.window_type === 'pay_as_you_go' || s.quota_unit === 'pay_as_you_go';
+    const quotaPct = Math.max(0, Math.min(100, Number(s.quota_remaining_pct ?? 100)));
     
     let statusBadge = '';
     let barColor = '#10B981';
+    let displayPct = quotaPct;
+
     if (!s.enabled) {
       statusBadge = '<span class="badge badge-warning">DISABLED</span>';
       barColor = 'var(--text-muted)';
+      displayPct = 0;
     } else if (!s.connected) {
-      statusBadge = '<span class="badge badge-warning">NOT DETECTED</span>';
-      barColor = 'var(--text-muted)';
+      statusBadge = '<span class="badge" style="background: rgba(148,163,184,0.15); color: #94A3B8; border: 1px solid rgba(148,163,184,0.25);">NOT CONFIGURED</span>';
+      barColor = 'rgba(148,163,184,0.3)';
+      displayPct = 0;
+    } else if (isPayAsYouGo) {
+      statusBadge = '<span class="badge badge-savings">DIRECT API (ACTIVE)</span>';
+      barColor = '#10B981';
+      displayPct = 100;
     } else if (quotaPct <= 0) {
-      statusBadge = '<span class="badge badge-arbitrage-alert">QUOTA EXHAUSTED</span>';
+      statusBadge = `<span class="badge badge-arbitrage-alert">${isDollar ? 'CREDITS EXHAUSTED' : 'QUOTA EXHAUSTED'}</span>`;
       barColor = '#EF4444';
+      displayPct = 0;
     } else if (quotaPct <= 15) {
-      statusBadge = '<span class="badge badge-warning">CONSERVING (&lt;15%)</span>';
+      statusBadge = `<span class="badge badge-warning">${isDollar ? 'LOW BALANCE (<15%)' : 'CONSERVING (<15%)'}</span>`;
       barColor = '#F59E0B';
+    } else if (isDollar) {
+      statusBadge = '<span class="badge badge-savings">ACTIVE CREDIT</span>';
+      barColor = '#10B981';
     } else {
       statusBadge = '<span class="badge badge-savings">ACTIVE ($0.00/TOK)</span>';
       barColor = '#10B981';
     }
 
-    let resetTimeText = 'Rolling window active';
+    let resetTimeText = isPayAsYouGo ? 'Pay-as-you-go' : (isDollar ? 'Rolling balance' : 'Rolling window active');
     if (s.resets_at) {
       const diffMs = s.resets_at - Date.now();
-      if (diffMs > 0) {
+      if (diffMs > 24 * 60 * 60 * 1000) {
+        const days = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+        resetTimeText = `Resets ${new Date(s.resets_at).toLocaleDateString([], { month: 'short', day: 'numeric' })} (${days}d)`;
+      } else if (diffMs > 0) {
         const hours = Math.floor(diffMs / (60 * 60 * 1000));
         const mins = Math.floor((diffMs % (60 * 60 * 1000)) / (60 * 1000));
         resetTimeText = `Resets in ${hours > 0 ? hours + 'h ' : ''}${mins}m`;
@@ -498,7 +573,26 @@ function renderSubscriptions(subs) {
       }
     }
 
-    const providerIcon = s.provider === 'anthropic' ? '🧠' : (s.provider === 'openai' ? '🤖' : '✨');
+    const providerIcon = s.provider === 'anthropic' ? '🧠'
+      : (s.provider === 'openai' ? '🤖'
+      : (s.provider === 'google' ? '✨'
+      : (s.provider === 'mistral' ? '🌪️'
+      : (s.provider === 'nvidia' ? '🟢'
+      : (s.provider === 'deepseek' ? '🐋'
+      : (s.provider === 'mammouth' ? '🦣'
+      : (s.provider === 'openrouter' ? '🌐' : '⚡')))))));
+
+    const quotaLabel = isPayAsYouGo ? 'Direct Routed Usage' : (isDollar ? 'Remaining Balance' : 'Remaining Free Quota');
+    let amountText = '';
+    if (isPayAsYouGo) {
+      amountText = isConnected
+        ? `${Number(s.quota_used_tokens || 0).toLocaleString()} toks ($${(Number(s.current_balance ?? 0)).toFixed(4)} spent)`
+        : 'API key required';
+    } else if (isDollar) {
+      amountText = `$${(Number(s.current_balance ?? 0)).toFixed(2)} / $${(Number(s.max_balance ?? 0)).toFixed(2)}`;
+    } else {
+      amountText = `${Number(s.quota_used_tokens || 0).toLocaleString()} / ${Number(s.quota_total_tokens || 0).toLocaleString()} toks`;
+    }
 
     html += `
       <div style="background: var(--card-bg, #0B1118); border: 1px solid var(--card-border, #162638); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
@@ -512,22 +606,23 @@ function renderSubscriptions(subs) {
           
           <div style="margin: 10px 0 6px 0;">
             <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; font-family: var(--font-mono);">
-              <span style="color: var(--text-muted);">Remaining Free Quota</span>
-              <strong style="color: ${barColor};">${quotaPct.toFixed(0)}%</strong>
+              <span style="color: var(--text-muted);">${quotaLabel}</span>
+              <strong style="color: ${barColor};">${isPayAsYouGo && isConnected ? 'ACTIVE' : (displayPct.toFixed(0) + '%')}</strong>
             </div>
             <div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden;">
-              <div style="height: 100%; width: ${quotaPct}%; background: ${barColor}; transition: width 0.3s ease;"></div>
+              <div style="height: 100%; width: ${displayPct}%; background: ${barColor}; transition: width 0.3s ease;"></div>
             </div>
           </div>
           
           <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 6px;">
-            <span>${Number(s.quota_used_tokens || 0).toLocaleString()} / ${Number(s.quota_total_tokens || 0).toLocaleString()} toks</span>
+            <span>${amountText}</span>
             <span>${resetTimeText}</span>
           </div>
         </div>
 
-        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); font-size: 11px; color: var(--text-muted); line-height: 1.3;">
-          ${escapeHtml(s.status_message || '')}
+        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); font-size: 11px; color: var(--text-muted); line-height: 1.3; display: flex; justify-content: space-between; align-items: center;">
+          <span>${escapeHtml(s.status_message || '')}</span>
+          ${!isConnected ? `<button onclick="openSettingsModal()" class="btn btn-secondary btn-sm" style="font-size: 10px; padding: 2px 7px; margin-left: 6px; white-space: nowrap; flex-shrink: 0;">⚙️ Configure</button>` : ''}
         </div>
       </div>
     `;
@@ -587,7 +682,13 @@ function renderModelDistribution(breakdown) {
     const pct = Math.round((item.count / total) * 100);
     const providerBadge = item.provider_used === 'mammouth'
       ? '<span class="badge badge-savings">Mammouth</span>'
-      : '<span class="badge badge-gateway">OpenRouter</span>';
+      : (item.provider_used === 'openrouter'
+      ? '<span class="badge badge-gateway">OpenRouter</span>'
+      : (item.provider_used === 'mistral'
+      ? '<span class="badge badge-savings">Mistral</span>'
+      : (item.provider_used === 'deepseek'
+      ? '<span class="badge badge-gateway">DeepSeek</span>'
+      : `<span class="badge badge-gateway">${escapeHtml(item.provider_used)}</span>`)));
 
     html += `
       <div class="dist-item">
@@ -801,7 +902,12 @@ async function runPromptTest() {
 
     const j = data.jev || {};
     const c = data.costs || {};
-    const providerName = data.selectedProvider === 'openrouter' ? 'OpenRouter' : 'Mammouth AI';
+    const providerName = data.selectedProvider === 'mistral' ? 'Mistral AI (Direct)'
+      : (data.selectedProvider === 'deepseek' ? 'DeepSeek (Direct)'
+      : (data.selectedProvider === 'anthropic' ? 'Anthropic (Direct)'
+      : (data.selectedProvider === 'openai' ? 'OpenAI (Direct)'
+      : (data.selectedProvider === 'google' ? 'Google Gemini'
+      : (data.selectedProvider === 'openrouter' ? 'OpenRouter' : 'Mammouth AI')))));
     const providerBadgeClass = data.selectedProvider === 'openrouter' ? 'badge-gateway' : 'badge-savings';
 
     panel.innerHTML = `
@@ -889,6 +995,7 @@ async function fetchSettings() {
     if (data.mistralKeyMasked) document.getElementById('input-mistral-key').placeholder = data.mistralKeyMasked;
     if (data.deepseekKeyMasked) document.getElementById('input-deepseek-key').placeholder = data.deepseekKeyMasked;
     if (data.geminiKeyMasked) document.getElementById('input-gemini-key').placeholder = data.geminiKeyMasked;
+    if (data.nvidiaKeyMasked && document.getElementById('input-nvidia-key')) document.getElementById('input-nvidia-key').placeholder = data.nvidiaKeyMasked;
     if (data.routingStrategy) document.getElementById('select-strategy').value = data.routingStrategy;
     if (data.defaultProvider) document.getElementById('select-provider').value = data.defaultProvider;
 
@@ -901,8 +1008,23 @@ async function fetchSettings() {
       if (claude && document.getElementById('select-sub-claude')) {
         document.getElementById('select-sub-claude').value = claude.enabled ? 'enabled' : 'disabled';
       }
+      if (claude && document.getElementById('input-sub-claude-quota')) {
+        document.getElementById('input-sub-claude-quota').value = claude.quota_remaining_pct;
+      }
+      if (claude && claude.resets_at && document.getElementById('input-sub-claude-reset')) {
+        const d = new Date(claude.resets_at);
+        document.getElementById('input-sub-claude-reset').value = d.toISOString().split('T')[0];
+      }
       if (codex && document.getElementById('select-sub-codex')) {
         document.getElementById('select-sub-codex').value = codex.enabled ? 'enabled' : 'disabled';
+      }
+      const vibe = subsData.subscriptions?.find(s => s.id === 'mistral_vibe');
+      const geminiCli = subsData.subscriptions?.find(s => s.id === 'gemini_cli');
+      if (vibe && document.getElementById('select-sub-vibe')) {
+        document.getElementById('select-sub-vibe').value = vibe.enabled ? 'enabled' : 'disabled';
+      }
+      if (geminiCli && document.getElementById('select-sub-gemini-cli')) {
+        document.getElementById('select-sub-gemini-cli').value = geminiCli.enabled ? 'enabled' : 'disabled';
       }
     }
   } catch (err) {
@@ -929,10 +1051,13 @@ async function saveSettings() {
   const mistralApiKey = document.getElementById('input-mistral-key').value;
   const deepseekApiKey = document.getElementById('input-deepseek-key').value;
   const geminiApiKey = document.getElementById('input-gemini-key').value;
+  const nvidiaApiKey = document.getElementById('input-nvidia-key')?.value;
   const routingStrategy = document.getElementById('select-strategy').value;
   const defaultProvider = document.getElementById('select-provider').value;
   const subClaudeVal = document.getElementById('select-sub-claude')?.value;
   const subCodexVal = document.getElementById('select-sub-codex')?.value;
+  const subVibeVal = document.getElementById('select-sub-vibe')?.value;
+  const subGeminiCliVal = document.getElementById('select-sub-gemini-cli')?.value;
 
   const payload = { routingStrategy, defaultProvider };
   if (typesafeApiKey) payload.typesafeApiKey = typesafeApiKey;
@@ -943,6 +1068,7 @@ async function saveSettings() {
   if (mistralApiKey) payload.mistralApiKey = mistralApiKey;
   if (deepseekApiKey) payload.deepseekApiKey = deepseekApiKey;
   if (geminiApiKey) payload.geminiApiKey = geminiApiKey;
+  if (nvidiaApiKey) payload.nvidiaApiKey = nvidiaApiKey;
 
   try {
     const res = await fetch('/api/settings', {
@@ -951,11 +1077,26 @@ async function saveSettings() {
       body: JSON.stringify(payload)
     });
 
-    if (subClaudeVal) {
+    const claudeQuotaVal = document.getElementById('input-sub-claude-quota')?.value;
+    const claudeResetVal = document.getElementById('input-sub-claude-reset')?.value;
+    if (subClaudeVal !== undefined || (claudeQuotaVal !== '' && claudeQuotaVal !== undefined) || claudeResetVal) {
+      const claudePayload = { id: 'claude_subscription' };
+      if (subClaudeVal) claudePayload.enabled = subClaudeVal === 'enabled';
+      if (claudeQuotaVal !== '' && claudeQuotaVal !== undefined) {
+        claudePayload.quota_remaining_pct = Number(claudeQuotaVal);
+        if (Number(claudeQuotaVal) <= 0) {
+          claudePayload.quota_used_tokens = 180000;
+        }
+      }
+      if (claudeResetVal) {
+        claudePayload.resets_at = new Date(claudeResetVal + 'T00:00:00Z').getTime();
+        claudePayload.window_type = 'weekly';
+        claudePayload.status_message = `Weekly allowance exhausted. Resets on ${new Date(claudePayload.resets_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}.`;
+      }
       await fetch('/api/subscriptions/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 'claude_subscription', enabled: subClaudeVal === 'enabled' })
+        body: JSON.stringify(claudePayload)
       });
     }
     if (subCodexVal) {
@@ -965,12 +1106,26 @@ async function saveSettings() {
         body: JSON.stringify({ id: 'codex_subscription', enabled: subCodexVal === 'enabled' })
       });
     }
+    if (subVibeVal) {
+      await fetch('/api/subscriptions/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'mistral_vibe', enabled: subVibeVal === 'enabled' })
+      });
+    }
+    if (subGeminiCliVal) {
+      await fetch('/api/subscriptions/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'gemini_cli', enabled: subGeminiCliVal === 'enabled' })
+      });
+    }
 
     if (res.ok) {
       closeSettingsModal();
       fetchSettings();
-      fetchSubscriptions();
-      alert('Settings saved successfully!');
+      await triggerSyncSubscriptions();
+      alert('Settings saved successfully! Provider status refreshed.');
     }
   } catch (err) {
     alert('Failed to save settings: ' + err.message);
@@ -988,14 +1143,21 @@ function escapeHtml(str) {
 }
 
 
-async function fetchCatalog() {
+let catalogCurrentPage = 1;
+let catalogTotalPages = 1;
+
+async function fetchCatalog(page = 1) {
   try {
+    catalogCurrentPage = Math.max(1, page);
     const search = document.getElementById('catalog-search')?.value || '';
     const tier = document.getElementById('catalog-tier-filter')?.value || 'all';
+    const provider = document.getElementById('catalog-provider-filter')?.value || 'all';
 
-    const res = await fetch(`/api/catalog?search=${encodeURIComponent(search)}&tier=${tier}`);
+    const res = await fetch(`/api/catalog?search=${encodeURIComponent(search)}&tier=${tier}&provider=${provider}&page=${catalogCurrentPage}&limit=50`);
     if (!res.ok) return;
     const data = await res.json();
+
+    catalogTotalPages = data.totalPages || 1;
 
     const countDisplay = document.getElementById('catalog-count-display');
     if (countDisplay) countDisplay.textContent = data.total;
@@ -1012,10 +1174,23 @@ async function fetchCatalog() {
 function renderCatalogTable(data) {
   const tbody = document.getElementById('catalog-table-body');
   const summary = document.getElementById('catalog-modal-summary');
+  const pageIndicator = document.getElementById('catalog-page-indicator');
+  const prevBtn = document.getElementById('catalog-prev-page');
+  const nextBtn = document.getElementById('catalog-next-page');
   if (!tbody) return;
 
   if (summary) {
-    summary.textContent = `Showing ${data.filteredCount} of ${data.total} synchronized models`;
+    summary.textContent = `Showing ${data.models?.length || 0} of ${data.filteredCount} models (${data.total} total synchronized)`;
+  }
+
+  if (pageIndicator) {
+    pageIndicator.textContent = `Page ${data.page || 1} of ${data.totalPages || 1}`;
+  }
+  if (prevBtn) {
+    prevBtn.disabled = (data.page || 1) <= 1;
+  }
+  if (nextBtn) {
+    nextBtn.disabled = (data.page || 1) >= (data.totalPages || 1);
   }
 
   if (!data.models || data.models.length === 0) {
@@ -1034,9 +1209,7 @@ function renderCatalogTable(data) {
     const promptPriceMTok = (m.promptPrice * 1_000_000).toFixed(3);
     const completionPriceMTok = (m.completionPrice * 1_000_000).toFixed(3);
     const tierBadge = getTierBadge(m.tier);
-    const providerBadge = m.provider === 'both'
-      ? '<span class="badge badge-savings">Mammouth &amp; OR</span>'
-      : (m.provider === 'mammouth' ? '<span class="badge badge-savings">Mammouth</span>' : '<span class="badge badge-gateway">OpenRouter</span>');
+    const providerBadge = getProviderBadge(m.provider);
 
     html += `
       <tr>
@@ -1053,6 +1226,25 @@ function renderCatalogTable(data) {
     `;
   }
   tbody.innerHTML = html;
+}
+
+function getProviderBadge(provider) {
+  switch (provider) {
+    case 'both':
+      return '<span class="badge" style="background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3);">Multi-Provider</span>';
+    case 'mammouth':
+      return '<span class="badge" style="background: rgba(139,92,246,0.15); color: #8B5CF6; border: 1px solid rgba(139,92,246,0.3);">Mammouth AI</span>';
+    case 'nvidia':
+      return '<span class="badge" style="background: rgba(118,185,0,0.15); color: #76B900; border: 1px solid rgba(118,185,0,0.3);">NVIDIA NIM</span>';
+    case 'mistral':
+      return '<span class="badge" style="background: rgba(249,115,22,0.15); color: #F97316; border: 1px solid rgba(249,115,22,0.3);">Mistral AI</span>';
+    case 'deepseek':
+      return '<span class="badge" style="background: rgba(59,130,246,0.15); color: #3B82F6; border: 1px solid rgba(59,130,246,0.3);">DeepSeek</span>';
+    case 'openrouter':
+      return '<span class="badge badge-gateway" style="background: rgba(6,182,212,0.15); color: #06B6D4; border: 1px solid rgba(6,182,212,0.3);">OpenRouter</span>';
+    default:
+      return `<span class="badge badge-gateway">${escapeHtml(provider || 'Unknown')}</span>`;
+  }
 }
 
 function getTierBadge(tier) {

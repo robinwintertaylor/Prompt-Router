@@ -184,19 +184,25 @@
         </div>
       </div>
 
-      <!-- Section 1B: Subscriptions & Free Token Quotas (ACP / Free Tiers) -->
+      <!-- Section 1B: Subscriptions, Free Token Quotas & Aggregator Balances -->
       <div class="content-panel" style="margin-bottom: 24px;">
         <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <h3 class="panel-title">⚡ Subscriptions &amp; Free Token Quotas (ACP / Zero-Cost Tiers)</h3>
+            <h3 class="panel-title">⚡ Subscriptions, Free Quotas &amp; Aggregator Balances</h3>
             <span class="badge badge-arbitrage-ok" id="badge-subs-connected">PROBE: READY</span>
           </div>
-          <button class="btn btn-secondary" id="btn-sync-subs" style="padding: 4px 12px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
-            🔄 Probe &amp; Refresh Quotas
-          </button>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="display: inline-flex; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border, #162638); border-radius: 6px; padding: 2px;">
+              <button class="btn btn-sm" id="btn-subs-filter-active" style="padding: 3px 10px; font-size: 11px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; border-radius: 4px;">Active Only</button>
+              <button class="btn btn-sm" id="btn-subs-filter-all" style="padding: 3px 10px; font-size: 11px; border: none; background: var(--gateway-teal-dark, #0891B2); color: #fff; cursor: pointer; border-radius: 4px;">All Providers</button>
+            </div>
+            <button class="btn btn-secondary" id="btn-sync-subs" style="padding: 4px 12px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
+              🔄 Probe &amp; Refresh Quotas
+            </button>
+          </div>
         </div>
         <p style="font-size: 12px; color: var(--text-muted); margin: 6px 0 14px 0;">
-          Jev prioritizes active subscription quotas ($0.00 marginal token cost) before falling back to pay-per-token API keys. When quota is low (&lt;15%), Jev enters <strong>Quota Conservation Mode</strong> to protect tokens for high-complexity code.
+          Jev monitors active ACP subscription free tokens ($0.00 marginal cost), configured direct API providers (Mistral AI, NVIDIA NIM, Anthropic, OpenAI, DeepSeek), and live prepaid aggregator credits before routing prompts.
         </p>
         <div id="subscriptions-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
           <!-- Rendered dynamically by app.js -->
@@ -372,6 +378,35 @@
                 <option value="disabled">Disabled</option>
               </select>
             </div>
+
+            <div class="form-field">
+              <label>Mistral Vibe (ACP Bridge)</label>
+              <select id="select-sub-vibe">
+                <option value="enabled">Enabled (Auto-probe vibe / vibe-acp)</option>
+                <option value="disabled">Disabled</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label>Google Gemini CLI (ACP Bridge)</label>
+              <select id="select-sub-gemini-cli">
+                <option value="enabled">Enabled (Auto-probe gemini / gemini-cli)</option>
+                <option value="disabled">Disabled</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="form-field">
+              <label>Claude Quota Remaining (%)</label>
+              <input type="number" id="input-sub-claude-quota" min="0" max="100" placeholder="e.g. 0 when exhausted">
+              <small>0% stops routing to Claude subscription until reset date.</small>
+            </div>
+            <div class="form-field">
+              <label>Claude Allowance Reset Date</label>
+              <input type="date" id="input-sub-claude-reset">
+              <small>Date when allowance unlocks (e.g. 2026-10-17).</small>
+            </div>
           </div>
 
           <div style="margin: 12px 0 6px 0; border-top: 1px dashed var(--card-border); padding-top: 10px;">
@@ -400,9 +435,14 @@
               <input type="password" id="input-deepseek-key" placeholder="sk-...">
             </div>
 
-            <div class="form-field" style="grid-column: span 2;">
+            <div class="form-field">
               <label>Google Gemini API Key (Direct AI Studio)</label>
               <input type="password" id="input-gemini-key" placeholder="AIzaSy...">
+            </div>
+
+            <div class="form-field">
+              <label>NVIDIA NIM API Key (Free Developer Credits)</label>
+              <input type="password" id="input-nvidia-key" placeholder="nvapi-...">
             </div>
           </div>
 
@@ -444,6 +484,14 @@
         </div>
         <div class="catalog-toolbar">
           <input type="text" id="catalog-search" placeholder="Search models by name, slug or description..." class="input-search-styled" style="flex: 1;">
+          <select id="catalog-provider-filter" class="catalog-tier-select">
+            <option value="all">All Providers</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="mammouth">Mammouth AI</option>
+            <option value="nvidia">NVIDIA NIM</option>
+            <option value="mistral">Mistral AI</option>
+            <option value="both">Multi-Provider</option>
+          </select>
           <select id="catalog-tier-filter" class="catalog-tier-select">
             <option value="all">All Tiers</option>
             <option value="frontier_reasoning">Frontier Reasoning</option>
@@ -474,6 +522,11 @@
         </div>
         <div class="modal-action-footer" style="justify-content: space-between; align-items: center;">
           <span style="font-size: 12px; color: var(--text-muted);" id="catalog-modal-summary">Showing 0 models</span>
+          <div style="display: flex; gap: 8px; align-items: center;" id="catalog-pagination">
+            <button class="btn btn-secondary btn-sm" id="catalog-prev-page" style="padding: 4px 10px; font-size: 11.5px;">&larr; Prev</button>
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-gray);" id="catalog-page-indicator">Page 1 of 1</span>
+            <button class="btn btn-secondary btn-sm" id="catalog-next-page" style="padding: 4px 10px; font-size: 11.5px;">Next &rarr;</button>
+          </div>
           <button class="btn btn-secondary" id="btn-close-catalog-footer">Close</button>
         </div>
       </div>

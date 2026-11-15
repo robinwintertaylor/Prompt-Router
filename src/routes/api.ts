@@ -1,15 +1,14 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
 import { getMetrics, getRecentLogs, getSetting, setSetting, getDetailedReport, getLogById, ReportFilters } from '../db.js';
 import { evaluateWithJev } from '../jev.js';
-import { selectOptimalModel, executeRoutedCompletion } from '../router.js';
+import { executeRoutedCompletion } from '../router.js';
 import { calculateCosts } from '../pricing.js';
 import { config } from '../config.js';
 import { getAllCatalogModels, syncCatalog } from '../catalog.js';
 import { addTelemetryClient, removeTelemetryClient } from '../telemetry.js';
 import { getArbitrageStatus } from '../arbitrage.js';
 import { recordAndBroadcastRequest } from './completions.js';
-import { getAllSubscriptions, getSubscription, updateSubscription, probeSubscriptionCredentials } from '../subscriptions.js';
+import { getAllSubscriptions, getSubscription, updateSubscription, probeSubscriptionCredentials, syncConfiguredProviderSubscriptions } from '../subscriptions.js';
 
 export function getFormattedMetrics() {
   const data = getMetrics();
@@ -291,6 +290,7 @@ export function handleGetSettings(req: Request, res: Response) {
   const mistralKey = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
   const deepseekKey = getSetting('DEEPSEEK_API_KEY', config.deepseekApiKey);
   const geminiKey = getSetting('GEMINI_API_KEY', config.geminiApiKey);
+  const nvidiaKey = getSetting('NVIDIA_API_KEY', config.nvidiaApiKey);
 
   res.json({
     hasTypesafeKey: !!(typesafeKey && typesafeKey.trim()),
@@ -301,6 +301,7 @@ export function handleGetSettings(req: Request, res: Response) {
     hasMistralKey: !!(mistralKey && mistralKey.trim()),
     hasDeepseekKey: !!(deepseekKey && deepseekKey.trim()),
     hasGeminiKey: !!(geminiKey && geminiKey.trim()),
+    hasNvidiaKey: !!(nvidiaKey && nvidiaKey.trim()),
     typesafeKeyMasked: typesafeKey ? typesafeKey.slice(0, 4) + '...' + typesafeKey.slice(-4) : '',
     mammouthKeyMasked: mammouthKey ? mammouthKey.slice(0, 4) + '...' + mammouthKey.slice(-4) : '',
     openrouterKeyMasked: openrouterKey ? openrouterKey.slice(0, 4) + '...' + openrouterKey.slice(-4) : '',
@@ -309,6 +310,7 @@ export function handleGetSettings(req: Request, res: Response) {
     mistralKeyMasked: mistralKey ? mistralKey.slice(0, 4) + '...' + mistralKey.slice(-4) : '',
     deepseekKeyMasked: deepseekKey ? deepseekKey.slice(0, 4) + '...' + deepseekKey.slice(-4) : '',
     geminiKeyMasked: geminiKey ? geminiKey.slice(0, 4) + '...' + geminiKey.slice(-4) : '',
+    nvidiaKeyMasked: nvidiaKey ? nvidiaKey.slice(0, 4) + '...' + nvidiaKey.slice(-4) : '',
     routingStrategy: getSetting('ROUTING_STRATEGY', config.routingStrategy),
     defaultProvider: getSetting('DEFAULT_PROVIDER', config.defaultProvider),
     port: config.port
@@ -325,6 +327,7 @@ export function handleUpdateSettings(req: Request, res: Response) {
     mistralApiKey,
     deepseekApiKey,
     geminiApiKey,
+    nvidiaApiKey,
     routingStrategy,
     defaultProvider
   } = req.body;
@@ -353,12 +356,19 @@ export function handleUpdateSettings(req: Request, res: Response) {
   if (geminiApiKey !== undefined && geminiApiKey !== null) {
     setSetting('GEMINI_API_KEY', geminiApiKey.trim());
   }
+  if (nvidiaApiKey !== undefined && nvidiaApiKey !== null) {
+    setSetting('NVIDIA_API_KEY', nvidiaApiKey.trim());
+  }
   if (routingStrategy) {
     setSetting('ROUTING_STRATEGY', routingStrategy);
   }
   if (defaultProvider) {
     setSetting('DEFAULT_PROVIDER', defaultProvider);
   }
+
+  // Dynamically sync and probe configured provider subscriptions
+  syncConfiguredProviderSubscriptions();
+  probeSubscriptionCredentials().catch(err => console.warn('[Probe] Background probe warning:', err.message));
 
   res.json({ success: true, message: 'Settings updated successfully' });
 }
@@ -368,6 +378,8 @@ export function handleGetCatalog(req: Request, res: Response) {
     const search = ((req.query.search as string) || '').toLowerCase();
     const tier = req.query.tier as string;
     const provider = req.query.provider as string;
+    const page = Math.max(parseInt(req.query.page as string || '1', 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string || '50', 10), 1), 500);
 
     const allModels = getAllCatalogModels();
 
@@ -386,10 +398,25 @@ export function handleGetCatalog(req: Request, res: Response) {
       filtered = filtered.filter(m => m.provider === provider || m.provider === 'both');
     }
 
+    // Sort alphabetically by ID so models from all providers are distributed
+    filtered.sort((a, b) => a.id.localeCompare(b.id));
+
+    const providersSummary: Record<string, number> = { all: allModels.length };
+    for (const m of allModels) {
+      providersSummary[m.provider] = (providersSummary[m.provider] || 0) + 1;
+    }
+
+    const offset = (page - 1) * limit;
+    const pagedModels = filtered.slice(offset, offset + limit);
+
     res.json({
       total: allModels.length,
       filteredCount: filtered.length,
-      models: filtered.slice(0, 100) // cap to 100 per query
+      page,
+      limit,
+      totalPages: Math.ceil(filtered.length / limit) || 1,
+      providersSummary,
+      models: pagedModels
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -406,7 +433,8 @@ export async function handleSyncCatalog(req: Request, res: Response) {
 }
 export function handleGetSubscriptions(req: Request, res: Response) {
   try {
-    const subscriptions = getAllSubscriptions();
+    const connectedOnly = req.query.connected === 'true';
+    const subscriptions = getAllSubscriptions(connectedOnly);
     res.json({ subscriptions });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -415,7 +443,7 @@ export function handleGetSubscriptions(req: Request, res: Response) {
 
 export function handleUpdateSubscription(req: Request, res: Response) {
   try {
-    const { id, enabled, connected, cli_path, session_token, quota_remaining_pct, resets_at } = req.body;
+    const { id, enabled, connected, cli_path, session_token, quota_remaining_pct, resets_at, window_type, status_message } = req.body;
     if (!id) return res.status(400).json({ error: 'Subscription ID is required' });
 
     updateSubscription(id, {
@@ -424,7 +452,9 @@ export function handleUpdateSubscription(req: Request, res: Response) {
       ...(cli_path !== undefined ? { cli_path: String(cli_path).trim() } : {}),
       ...(session_token !== undefined ? { session_token: String(session_token).trim() } : {}),
       ...(quota_remaining_pct !== undefined ? { quota_remaining_pct: Number(quota_remaining_pct) } : {}),
-      ...(resets_at !== undefined ? { resets_at: Number(resets_at) } : {})
+      ...(resets_at !== undefined ? { resets_at: Number(resets_at) } : {}),
+      ...(window_type !== undefined ? { window_type } : {}),
+      ...(status_message !== undefined ? { status_message: String(status_message) } : {})
     });
 
     res.json({ success: true, subscription: getSubscription(id) });
@@ -433,9 +463,9 @@ export function handleUpdateSubscription(req: Request, res: Response) {
   }
 }
 
-export function handleSyncSubscriptions(req: Request, res: Response) {
+export async function handleSyncSubscriptions(req: Request, res: Response) {
   try {
-    const probe = probeSubscriptionCredentials();
+    const probe = await probeSubscriptionCredentials();
     const subscriptions = getAllSubscriptions();
     res.json({ success: true, probe, subscriptions });
   } catch (err: any) {

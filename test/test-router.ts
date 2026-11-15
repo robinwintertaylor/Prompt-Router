@@ -1,4 +1,4 @@
-import { initDatabase, getMetrics, getRecentLogs, logRequest, setSetting } from '../src/db.js';
+import { initDatabase, getMetrics, getRecentLogs, logRequest, setSetting, getSetting } from '../src/db.js';
 import { calculateCosts } from '../src/pricing.js';
 import { evaluateWithJev } from '../src/jev.js';
 import { selectOptimalModel, getDirectVendorIfConfigured } from '../src/router.js';
@@ -178,6 +178,8 @@ async function runTests() {
 
   // Test 3F: Testing Credential-Aware Direct Vendor Dispatch (Mistral, Anthropic, OpenAI)
   console.log('Test 3F: Testing Credential-Aware Direct Dispatch...');
+  const prevMistral = getSetting('MISTRAL_API_KEY', '');
+  const prevAnthropic = getSetting('ANTHROPIC_API_KEY', '');
   setSetting('MISTRAL_API_KEY', '');
   setSetting('ANTHROPIC_API_KEY', '');
   if (getDirectVendorIfConfigured('mistralai/mistral-large') !== null) {
@@ -197,8 +199,8 @@ async function runTests() {
   if (anthropicVendor !== 'anthropic') {
     throw new Error(`Expected 'anthropic', got '${anthropicVendor}'`);
   }
-  setSetting('MISTRAL_API_KEY', '');
-  setSetting('ANTHROPIC_API_KEY', '');
+  setSetting('MISTRAL_API_KEY', prevMistral);
+  setSetting('ANTHROPIC_API_KEY', prevAnthropic);
   console.log('✅ Credential-Aware Direct Dispatch verified.\n');
 
 

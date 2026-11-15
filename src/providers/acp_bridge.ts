@@ -1,6 +1,15 @@
 import { spawn } from 'child_process';
 import { Readable } from 'stream';
-import { getSubscription, recordSubscriptionUsage } from '../subscriptions.js';
+import { getSubscription, recordSubscriptionUsage, updateSubscription } from '../subscriptions.js';
+import { getSetting } from '../db.js';
+import { config } from '../config.js';
+
+export type AcpSubscriptionId =
+  | 'claude_subscription'
+  | 'codex_subscription'
+  | 'gemini_free'
+  | 'mistral_vibe'
+  | 'gemini_cli';
 
 export interface AcpBridgeResponse {
   ok: boolean;
@@ -8,7 +17,7 @@ export interface AcpBridgeResponse {
   data?: any;
   stream?: any;
   error?: string;
-  provider: 'acp_claude' | 'acp_codex' | 'gemini_free';
+  provider: 'acp_claude' | 'acp_codex' | 'gemini_free' | 'mistral_vibe' | 'gemini_cli' | string;
   tokensUsed?: number;
   quotaExhausted?: boolean;
 }
@@ -50,13 +59,15 @@ export function createStreamFromText(model: string, text: string) {
 }
 
 export async function callAcpBridge(
-  subId: 'claude_subscription' | 'codex_subscription' | 'gemini_free',
+  subId: AcpSubscriptionId,
   body: any,
   stream = false
 ): Promise<AcpBridgeResponse> {
   const sub = getSubscription(subId);
   const providerKey = subId === 'claude_subscription' ? 'acp_claude'
-    : (subId === 'codex_subscription' ? 'acp_codex' : 'gemini_free');
+    : (subId === 'codex_subscription' ? 'acp_codex'
+    : (subId === 'mistral_vibe' ? 'mistral_vibe'
+    : (subId === 'gemini_cli' ? 'gemini_cli' : 'gemini_free')));
 
   if (!sub || !sub.enabled) {
     return {
@@ -88,7 +99,11 @@ export async function callAcpBridge(
     : JSON.stringify(lastUserMsg?.content || '');
 
   const promptTokens = Math.ceil(JSON.stringify(messages).length / 4);
-  const cliBinary = sub.cli_path || (subId === 'claude_subscription' ? 'claude' : 'codex');
+  const cliBinary = sub.cli_path || (
+    subId === 'claude_subscription' ? 'claude'
+    : (subId === 'mistral_vibe' ? 'vibe'
+    : (subId === 'gemini_cli' || subId === 'gemini_free' ? 'gemini' : 'codex'))
+  );
 
   return new Promise<AcpBridgeResponse>((resolve) => {
     let resolved = false;
@@ -99,21 +114,46 @@ export async function callAcpBridge(
     if (subId === 'claude_subscription') {
       args.push('--print');
       if (systemMsg?.content) {
-        args.push('--system', typeof systemMsg.content === 'string' ? systemMsg.content : JSON.stringify(systemMsg.content));
+        args.push('--system-prompt', typeof systemMsg.content === 'string' ? systemMsg.content : JSON.stringify(systemMsg.content));
       }
-      args.push(promptText);
+    } else if (subId === 'mistral_vibe') {
+      // Mistral Vibe programmatic mode: read prompt from stdin
+      args.push('-p', '--trust');
+    } else if (subId === 'gemini_cli' || subId === 'gemini_free') {
+      // Google Gemini CLI
+      args.push('-p');
     } else {
-      args.push('exec', promptText);
+      args.push('exec');
     }
 
     try {
+      const mistralKey = getSetting('MISTRAL_API_KEY', config.mistralApiKey);
+      const geminiKey = getSetting('GEMINI_API_KEY', config.geminiApiKey);
+
+      const isWin = process.platform === 'win32';
+      const isBatchScript = isWin && (cliBinary.toLowerCase().endsWith('.cmd') || cliBinary.toLowerCase().endsWith('.bat'));
       const child = spawn(cliBinary, args, {
-        shell: true,
+        shell: isBatchScript,
+        windowsHide: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
-          ...(sub.session_token ? { ACP_SESSION_TOKEN: sub.session_token } : {})
+          PYTHONIOENCODING: 'utf-8',
+          PYTHONUTF8: '1',
+          ...(sub.session_token ? { ACP_SESSION_TOKEN: sub.session_token } : {}),
+          ...(subId === 'mistral_vibe' && mistralKey ? { MISTRAL_API_KEY: mistralKey.trim(), VIBE_API_KEY: mistralKey.trim() } : {}),
+          ...((subId === 'gemini_cli' || subId === 'gemini_free') && geminiKey ? { GEMINI_API_KEY: geminiKey.trim() } : {})
         }
       });
+
+      // Write prompt via stdin to avoid command line length limits and escaping bugs on Windows
+      if (child.stdin) {
+        child.stdin.write(promptText, 'utf8', (err) => {
+          if (!err) {
+            try { child.stdin.end(); } catch (_) {}
+          }
+        });
+      }
 
       const timeout = setTimeout(() => {
         if (!resolved) {
@@ -157,13 +197,49 @@ export async function callAcpBridge(
         const lowerStderr = stderrBuffer.toLowerCase();
         const lowerStdout = stdoutBuffer.toLowerCase();
 
+        // Check for authentication failures or expired sessions
+        if (
+          lowerStderr.includes('oauth session expired') ||
+          lowerStdout.includes('oauth session expired') ||
+          lowerStderr.includes('failed to authenticate') ||
+          lowerStdout.includes('failed to authenticate') ||
+          lowerStderr.includes('ineligibletiererror') ||
+          lowerStdout.includes('ineligibletiererror') ||
+          lowerStderr.includes('unsupported_client') ||
+          lowerStdout.includes('unsupported_client')
+        ) {
+          const authMsg = `${sub.name} authentication expired or unavailable: ${(stderrBuffer || stdoutBuffer).trim().slice(0, 150)}`;
+          updateSubscription(subId, {
+            connected: false,
+            quota_remaining_pct: 0,
+            status_message: authMsg
+          });
+          return resolve({
+            ok: false,
+            status: 401,
+            error: `Subscription ACP authentication failed: ${authMsg}`,
+            provider: providerKey,
+            quotaExhausted: true
+          });
+        }
+
         if (
           lowerStderr.includes('rate limit') ||
           lowerStderr.includes('quota') ||
           lowerStderr.includes('too many requests') ||
-          lowerStdout.includes('you have reached your usage limit')
+          lowerStdout.includes('you have reached your usage limit') ||
+          lowerStderr.includes('weekly limit') ||
+          lowerStdout.includes('weekly limit') ||
+          lowerStderr.includes('allowance') ||
+          lowerStdout.includes('allowance')
         ) {
-          recordSubscriptionUsage(subId, promptTokens, 0, Date.now() + 5 * 60 * 60 * 1000);
+          let resetsAt = Date.now() + 5 * 60 * 60 * 1000;
+          const matchDate = (stderrBuffer + ' ' + stdoutBuffer).match(/(?:reset(?:s)?\s*(?:on|at)\s*)([A-Za-z]+\s+\d{1,2}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+|\d{1,2}:\d{2})/i);
+          if (matchDate) {
+            const parsed = Date.parse(matchDate[1] + ` ${new Date().getFullYear()}`);
+            if (!isNaN(parsed)) resetsAt = parsed;
+          }
+          recordSubscriptionUsage(subId, promptTokens, 0, resetsAt);
           return resolve({
             ok: false,
             status: 429,

@@ -7,11 +7,11 @@ export interface DirectOpenAIResponse {
   data?: any;
   stream?: any;
   error?: string;
-  provider: 'openai' | 'mistral' | 'deepseek' | 'google';
+  provider: 'openai' | 'mistral' | 'deepseek' | 'google' | 'nvidia';
 }
 
 export async function callDirectOpenAICompatible(
-  vendor: 'openai' | 'mistral' | 'deepseek' | 'google',
+  vendor: 'openai' | 'mistral' | 'deepseek' | 'google' | 'nvidia',
   body: any,
   stream = false
 ): Promise<DirectOpenAIResponse> {
@@ -34,6 +34,10 @@ export async function callDirectOpenAICompatible(
     case 'google':
       endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
       apiKey = getSetting('GEMINI_API_KEY', config.geminiApiKey);
+      break;
+    case 'nvidia':
+      endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
+      apiKey = getSetting('NVIDIA_API_KEY', config.nvidiaApiKey);
       break;
   }
 
@@ -120,6 +124,19 @@ function mapVendorModelId(vendor: string, model: string): string {
     if (m.includes('flash')) return 'gemini-2.5-flash';
     if (m.includes('pro')) return 'gemini-2.5-pro';
     return stripped;
+  }
+
+  if (vendor === 'nvidia') {
+    if (m.includes('llama-3.3-70b') || m.includes('llama-3.3')) return 'meta/llama-3.3-70b-instruct';
+    if (m.includes('r1') || m.includes('deepseek-r1')) return 'deepseek-ai/deepseek-r1';
+    if (m.includes('nemotron')) return 'nvidia/llama-3.1-nemotron-70b-instruct';
+    if (m.includes('mistral-large')) return 'mistralai/mistral-large-2-instruct';
+    if (m.includes('llama-3.1-8b') || m.includes('8b')) return 'meta/llama-3.1-8b-instruct';
+    if (model.startsWith('nvidia/')) {
+      const rest = model.slice(7);
+      return rest.includes('/') ? rest : model;
+    }
+    return model;
   }
 
   return stripped;
